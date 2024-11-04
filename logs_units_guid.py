@@ -24,6 +24,10 @@ TEMP_DK_PETS = {
 NIL_GUID = "0x0000000000000000"
 FLAG_SKIP = {"PARTY_KILL", "UNIT_DIED"}
 FLAG_PET_AGGRO = {"SWING_DAMAGE", "SPELL_DAMAGE"}
+FLAG_IGNORE_PLAYER_CLASS = {
+    "SPELL_AURA_REMOVED",
+    "ENCHANT_APPLIED",
+}
 NAMES_SKIP = {"nil", "Unknown"}
 PET_FILTER_SPELLS = {
 "43771", # Well Fed (Spiced Mammoth Treats)
@@ -174,7 +178,7 @@ def pet_group_by_id(pets_raw):
     return d
 
 
-def new_entry(name: str, master_name: str, master_guid: str):
+def new_unit(name: str, master_name: str, master_guid: str):
     return {
         'name': name,
         'master_name': master_name,
@@ -215,7 +219,7 @@ def add_missing_pets(everything: dict[str, str], pets_perma: dict[str, dict[str,
         
         master_name = everything[master_guid]['name']
         pet_name = get_name(guid_id)
-        _pet = new_entry(pet_name, master_name, master_guid)
+        _pet = new_unit(pet_name, master_name, master_guid)
         for pet_guid in pet_guids:
             everything[pet_guid] = _pet
             pets_perma[pet_guid] = _pet
@@ -226,12 +230,13 @@ def add_missing_pets(everything: dict[str, str], pets_perma: dict[str, dict[str,
 def logs_parser(logs: list[str]): # sourcery no-metrics
     everything: dict[str, dict[str, str]] = {}
     pets_perma: dict[str, dict[str, str]] = {}
-    ghouls: defaultdict[str, set[str]] = defaultdict(set)
-    felhunters: defaultdict[str, set[str]] = defaultdict(set)
 
     temp_pets: dict[str, dict[str, str]] = {}
     pets_perma_all: set[str] = set()
-    last_abom = {}
+
+    _ignored_pet_names = set()
+
+    other_perma_pets: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
 
     players = {}
     players_classes = {}
@@ -256,31 +261,39 @@ def logs_parser(logs: list[str]): # sourcery no-metrics
         if sGUID not in players_skip:
             if not is_player(sGUID):
                 players_skip.add(sGUID)
-            elif spell_id in SPELL_BOOK and flag != "SPELL_AURA_REMOVED":
+            elif spell_id in SPELL_BOOK and flag not in FLAG_IGNORE_PLAYER_CLASS:
                 players[sGUID] = sName
-                spell_info = SPELL_BOOK[spell_id]
-                players_classes[sGUID] = CLASSES[spell_info[0]]
+                class_i = SPELL_BOOK[spell_id]
+                players_classes[sGUID] = CLASSES[class_i]
                 players_skip.add(sGUID)
-                LOGGER_REPORTS.info(f" NEW CLASS | {sName:12} | {line}")
+                # LOGGER_REPORTS.info(f" NEW CLASS | {sName:12} | {line}")
 
         if spell_id == "47468": # Claw
-            if sGUID[6:-6] not in TEMP_DK_PETS and tGUID[:4] == "0xF1":
-                ghouls[sGUID].add(tGUID)
-                if sName not in GHOUL_NAMES:
+            # if sGUID[6:-6] not in TEMP_DK_PETS:
+            if sGUID[:5] == "0xF14":
+                other_perma_pets["Ghoul"][sGUID].add(tGUID)
+                if sName in _ignored_pet_names:
+                    pass
+                elif sName not in GHOUL_NAMES:
+                    _ignored_pet_names.add(sName)
                     LOGGER_REPORTS.debug(f"sName not in GHOUL_NAMES {sName}")
 
         elif spell_id == "54053": # Shadow Bite
             if sGUID[:5] == "0xF14" and tGUID[:4] == "0xF1":
-                felhunters[sGUID].add(tGUID)
+                other_perma_pets["Felhunter"][sGUID].add(tGUID)
+
+        elif spell_id == "72898": # Waterbolt
+            if sGUID[:5] == "0xF14" and tGUID[:4] == "0xF1":
+                other_perma_pets["Water Elemental"][sGUID].add(tGUID)
 
         elif flag == "SPELL_SUMMON":
             if tGUID[6:-6] in BOSS_PETS:
                 continue
             if is_perma_pet(tGUID):
-                pets_perma[tGUID] = new_entry(tName, sName, sGUID)
+                pets_perma[tGUID] = new_unit(tName, sName, sGUID)
                 pets_perma_all.add(tGUID)
             elif sGUID != tGUID:
-                temp_pets[tGUID] = new_entry(tName, sName, sGUID)
+                temp_pets[tGUID] = new_unit(tName, sName, sGUID)
 
         elif spell_id in PET_FILTER_SPELLS:
             if sGUID == tGUID:
@@ -288,7 +301,7 @@ def logs_parser(logs: list[str]): # sourcery no-metrics
                     pets_perma_all.add(sGUID)
             
             elif is_player(sGUID):
-                pet_info = new_entry(tName, sName, sGUID)
+                pet_info = new_unit(tName, sName, sGUID)
                 if is_perma_pet(tGUID):
                     pets_perma[tGUID] = pet_info
                     pets_perma_all.add(tGUID)
@@ -296,7 +309,7 @@ def logs_parser(logs: list[str]): # sourcery no-metrics
                     temp_pets[tGUID] = pet_info
             
             elif is_player(tGUID):
-                pet_info = new_entry(sName, tName, tGUID)
+                pet_info = new_unit(sName, tName, tGUID)
                 if is_perma_pet(sGUID):
                     pets_perma[sGUID] = pet_info
                     pets_perma_all.add(sGUID)
@@ -304,14 +317,7 @@ def logs_parser(logs: list[str]): # sourcery no-metrics
                     temp_pets[sGUID] = pet_info
 
         elif spell_id == "34650": # Mana Leech
-            temp_pets[sGUID] = new_entry("Shadowfiend", tName, tGUID)
-
-        elif spell_id == "70308": # Mutated Transformation
-            last_abom = new_entry("Mutated Abomination", sName, sGUID)
-
-        elif last_abom and sGUID == tGUID and sGUID[6:-6] == "00958D": # Mutated Abomination
-            temp_pets[sGUID] = last_abom
-            last_abom = {}
+            temp_pets[sGUID] = new_unit("Shadowfiend", tName, tGUID)
 
         elif is_perma_pet(sGUID) and flag in FLAG_PET_AGGRO:
             pets_perma_all.add(sGUID)
@@ -326,8 +332,7 @@ def logs_parser(logs: list[str]): # sourcery no-metrics
         "players": dict(sorted(players.items())),
         "classes": dict(sorted(players_classes.items())),
         "pets_perma": pets_perma,
-        "Ghoul": ghouls,
-        "Felhunter": felhunters,
+        "other_perma_pets": other_perma_pets,
         "missing_owner": missing_owner,
     }
 
@@ -348,10 +353,110 @@ def convert_nested_masters(data: dict[str, dict[str, str]]):
         unit_info['master_name'] = data[master_master_guid]['name']
 
 @running_time
+def get_water_elementals(logs_slice: list[str]):
+    WATER_ELEMENTAL_ID = "00946A"
+    WATER_ELEMENTAL_SUMMON_ID = "31687"
+    WATER_ELEMENTAL_SUMMON_ID_STR = f",{WATER_ELEMENTAL_SUMMON_ID},"
+
+    water_elementals = {}
+    last_water_elemental = None
+    lines_from_last_summon = 0
+
+    for line in logs_slice:
+        if WATER_ELEMENTAL_SUMMON_ID_STR in line:
+            _, _, source_guid, source_name, _, _, spell_id, _ = line.split(',', 7)
+            if spell_id == WATER_ELEMENTAL_SUMMON_ID:
+                last_water_elemental = new_unit("Water Elemental", source_name, source_guid)
+                lines_from_last_summon = 0
+            continue
+        
+        if last_water_elemental is None:
+            continue
+        
+        if WATER_ELEMENTAL_ID not in line:
+            lines_from_last_summon += 1
+            if lines_from_last_summon > 200:
+                LOGGER_REPORTS.debug(f"Water Elemental | {last_water_elemental['master_name']:12} >>> not found")
+                last_water_elemental = None
+            continue
+
+        _, _, source_guid, _, target_guid, _ = line.split(',', 5)
+        if source_guid[6:-6] == WATER_ELEMENTAL_ID:
+            elemental_guid = source_guid
+        elif target_guid[6:-6] == WATER_ELEMENTAL_ID:
+            elemental_guid = target_guid
+        else:
+            continue
+        
+        if elemental_guid in water_elementals:
+            continue
+
+        LOGGER_REPORTS.debug(f"Water Elemental | {last_water_elemental['master_name']:12} >>> {elemental_guid}")
+        water_elementals[elemental_guid] = last_water_elemental
+        last_water_elemental = None
+        lines_from_last_summon = 0
+
+    return water_elementals
+
+def get_mutated_aboms(logs_slice: list[str]):
+    MUTATED_ABOMINATION_ID = "00958D"
+    MUTATED_TRANSFORMATION_ID = "70308"
+    MUTATED_TRANSFORMATION_ID_STR = f",{MUTATED_TRANSFORMATION_ID},"
+
+    mutated_aboms = {}
+    last_abom_unit_data = None
+    lines_from_last_summon = 0
+
+    for line in logs_slice:
+        if MUTATED_TRANSFORMATION_ID_STR in line:
+            _, _, source_guid, source_name, _, _, spell_id, _ = line.split(',', 7)
+            if spell_id == MUTATED_TRANSFORMATION_ID:
+                last_abom_unit_data = new_unit("Mutated Abomination", source_name, source_guid)
+                lines_from_last_summon = 0
+            continue
+        
+        if last_abom_unit_data is None:
+            continue
+
+        if MUTATED_ABOMINATION_ID not in line:
+            lines_from_last_summon += 1
+            if lines_from_last_summon > 200:
+                LOGGER_REPORTS.debug(f"Mutated Abomination | {last_abom_unit_data['master_name']:12} >>> not found")
+                last_abom_unit_data = None
+            continue
+
+        _, _, source_guid, _, target_guid, _ = line.split(',', 5)
+        if source_guid != target_guid:
+            continue
+        if source_guid[6:-6] != MUTATED_ABOMINATION_ID:
+            continue
+
+        LOGGER_REPORTS.debug(f"Mutated Abomination | {last_abom_unit_data['master_name']:12} >>> {source_guid}")
+        mutated_aboms[source_guid] = last_abom_unit_data
+        last_abom_unit_data = None
+        lines_from_last_summon = 0
+
+    return mutated_aboms
+
+@running_time
+def get_mutated_aboms_wrap(logs: list[str], encounter_data: list[int, int]):
+    mutated_aboms = {}
+    for s, f in encounter_data:
+        mutated_aboms |= get_mutated_aboms(logs[s:f])
+
+    return mutated_aboms
+
+@running_time
 def guids_main(logs, enc_data):
     parsed = logs_parser(logs)
-    logs_pet_bullshit.PET_BULLSHIT(logs, enc_data, parsed, "Unholy")
-    logs_pet_bullshit.PET_BULLSHIT(logs, enc_data, parsed, "Affliction")
+
+    parsed["everything"] |= get_water_elementals(logs)
+
+    if "Professor Putricide" in enc_data:
+        pp_segments = enc_data["Professor Putricide"]
+        parsed["everything"] |= get_mutated_aboms_wrap(logs, pp_segments)
+
+    logs_pet_bullshit.find_pet_owners(logs, enc_data, parsed)
 
     convert_nested_masters(parsed["everything"])
     return parsed

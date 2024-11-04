@@ -12,7 +12,6 @@ from time import perf_counter, sleep
 import api_7z
 import h_server_fix
 import logs_fix
-
 from constants import (
     DEFAULT_SERVER_NAME,
     LOGS_CUT_NAME,
@@ -22,6 +21,7 @@ from c_bosses import convert_to_fight_name
 from c_path import Directories, PathExt
 from h_debug import Loggers, get_ms_str, running_time
 from h_datetime import to_dt_bytes_closure
+from h_other import get_report_name_info
 
 LOGGER_UPLOADS = Loggers.uploads
 
@@ -49,29 +49,39 @@ SAVING_SLICES = "Saving log slices..."
 SEMI_DONE = "Finishing caching..."
 
 
-def raw_exists(raid_id):
+def raw_exists(raid_id: str):
     pending = Directories.pending_archive / f"{raid_id}.txt"
     if pending.is_file():
+        LOGGER_UPLOADS.debug(f"raw_exists pending.is_file")
         return True
     
     archive_path = Directories.archives / f"{raid_id}.7z"
     archive = api_7z.SevenZipArchive(archive_path)
     if archive.archive_id:
+        LOGGER_UPLOADS.debug(f"raw_exists archive.archive_id")
         return True
     
     backup_archive_path = archive_path.backup_path()
     backup_archive = api_7z.SevenZipArchive(backup_archive_path)
     if backup_archive.archive_id:
+        LOGGER_UPLOADS.debug(f"raw_exists backup_archive.archive_id")
         return True
     
     return False
 
 def slice_exists(p: PathExt):
     return p.is_file() and p.stat().st_size > 2048
-    
-def is_fully_processed(raid_id: str):
+
+def logs_directory_exists(raid_id: str):
     logs_name = Directories.logs / raid_id / LOGS_CUT_NAME
-    return slice_exists(logs_name) and raw_exists(raid_id)
+    _slice_exists = slice_exists(logs_name)
+    if not _slice_exists:
+        logs_name_backup = logs_name.backup_path()
+        _slice_exists = slice_exists(logs_name_backup)
+    return _slice_exists
+
+def is_fully_processed(raid_id: str):
+    return logs_directory_exists(raid_id) and raw_exists(raid_id)
 
 
 def nuke_folder_contents(directory: PathExt, suffix: str=None):
@@ -398,9 +408,9 @@ class LogsSeparator:
 def get_now_timestamp():
     return datetime.now().strftime(DATE_FORMAT)
 
-def new_upload_folder(ip: str="localhost", timestamp: str=None):
+def new_upload_folder(ip: str="0.0.0.0", timestamp: str=None):
     if not ip or not isinstance(ip, str):
-        ip = "localhost"
+        ip = "0.0.0.0"
     if not timestamp:
         timestamp = get_now_timestamp()
     
@@ -569,16 +579,11 @@ class LogsArchiveParser(LogsArchiveStatus):
         only_slices=False,
         keep_temp_folder=False,
     ) -> None:
-        if not upload_data:
-            upload_data = UploadData()
         super().__init__(archive_path, upload_data)
-
-        self.upload_data = upload_data
 
         self.forced = forced
         self.only_slices = only_slices
         self.keep_temp_folder = keep_temp_folder
-        self.keep_temp_folder = True
 
         self.has_duplicates = False
         self.has_error = False
@@ -710,6 +715,7 @@ class LogsArchive(LogsArchiveParser):
     def proccess_archive(self):
         self.pc_main = perf_counter()
         if self.is_fully_proccessed():
+            self.finish(ALREADY_DONE)
             return
 
         if self.uncompressed_size > disk_usage(__file__).free:
@@ -735,8 +741,8 @@ class LogsArchive(LogsArchiveParser):
         
         self.write_file_info()
         self.remove_prev_uploaded()
-        self.move_sliced_logs()
         self.move_uploaded_archive_wrap()
+        self.move_sliced_logs()
         self.remove_temp_upload_folder()
 
     def release_archive_file(self):
@@ -748,9 +754,11 @@ class LogsArchive(LogsArchiveParser):
             return
         
         self._7z_pipe.kill()
-        LOGGER_UPLOADS.debug(f"kill {self._7z_pipe}")
+        # LOGGER_UPLOADS.debug(f"kill {self._7z_pipe}")
+        LOGGER_UPLOADS.debug(f"{self.archive_path.parent} | kill pipe")
         self._7z_pipe.wait()
-        LOGGER_UPLOADS.debug(f"wait {self._7z_pipe}")
+        # LOGGER_UPLOADS.debug(f"wait {self._7z_pipe}")
+        LOGGER_UPLOADS.debug(f"{self.archive_path.parent} | wait pipe")
         
     def move_uploaded_archive_wrap(self):
         self.release_archive_file()
@@ -774,7 +782,7 @@ class LogsArchive(LogsArchiveParser):
         pc = perf_counter()
         raw_path_current = self.upload_data.directory / f"{raid_id}.txt"
         if not raw_path_current.is_file():
-            print(">>> not raw_path_current.is_file", raid_id)
+            print(">>> Missing:", raw_path_current)
             return
         
         if not self.forced and raw_exists(raid_id):
@@ -794,11 +802,17 @@ class LogsArchive(LogsArchiveParser):
 
     def move_sliced_logs(self):
         if self.has_error:
-            nuke_folder_contents(self.upload_data.directory, suffix=".txt")
+            # nuke_folder_contents(self.upload_data.directory, suffix=".txt")
+            # LOGGER_UPLOADS.debug(f"{self.archive_path.parent} | nuke_folder_contents")
             return
         
         for raid_id in self.slices:
             self._move_raid_slice(raid_id)
+        LOGGER_UPLOADS.debug(f"{self.archive_path.parent} | _move_raid_slice")
+
+        for x in self.upload_data.directory.iterdir():
+            print(x)
+        LOGGER_UPLOADS.debug(f"{self.archive_path.parent} | Listed")
 
     def move_uploaded_archive(self):
         if self.archive_path.parent != self.upload_data.directory:
@@ -814,6 +828,7 @@ class LogsArchive(LogsArchiveParser):
         _file_id = f"{ip}--{timestamp}--{name}"
         new_archive_name = _dir / _file_id
         self.archive_path.rename(new_archive_name)
+        LOGGER_UPLOADS.debug(f"{self.archive_path.parent} | move_uploaded_archive | {new_archive_name}")
 
     def remove_temp_upload_folder(self):
         if self.keep_temp_folder:
@@ -866,18 +881,23 @@ class LogsArchive(LogsArchiveParser):
         return self.server != old_server
 
     def remove_prev_uploaded(self):
-        if not self.is_new_server():
-            return
-        
-        prev_server = self.prev_info.get("server")
+        prev_server = self.prev_info.get("server") or "Unknown"
         for raid_id in self.slices:
-            raid_id = raid_id.replace(self.server, prev_server)
-            remove_prev_raid_upload(raid_id)
+            _id = get_report_name_info(raid_id)
+            if _id["server"] == prev_server:
+                continue
+            _id["server"] = prev_server
+            prev_raid_id = '--'.join(_id.values())
+            remove_prev_raid_upload(prev_raid_id)
 
     @running_time
     def is_fully_proccessed(self):
-        if self.forced or not self.prev_info:
-            LOGGER_UPLOADS.debug(f"/ is_fully_proccessed self.forced or not self.prev_info")
+        if self.forced:
+            LOGGER_UPLOADS.debug(f"/ is_fully_proccessed self.forced")
+            return False
+        
+        if not self.prev_info:
+            LOGGER_UPLOADS.debug(f"/ is_fully_proccessed not self.prev_info")
             return False
         
         if self.is_new_server():
@@ -885,17 +905,22 @@ class LogsArchive(LogsArchiveParser):
             return False
 
         if not self.prev_info.get("slices"):
-            self.finish(ALREADY_DONE_NONE_FOUND)
             LOGGER_UPLOADS.debug(f"/ is_fully_proccessed not self.prev_info.get('slices')")
-            return True
+            return False
         
-        for raid_id in self.prev_info["slices"]:
+        return self.all_slices_proccessed()
+
+    def all_slices_proccessed(self):
+        slices = self.prev_info.get("slices", [])
+        for raid_id in slices:
             if not is_fully_processed(raid_id):
                 LOGGER_UPLOADS.debug(f"/ is_fully_proccessed not is_fully_processed {raid_id}")
                 return False
         
-        self.finish(ALREADY_DONE)
         return True
+
+
+#######################################
 
 @dataclass
 class UploadChunk:
@@ -908,23 +933,26 @@ class NewUpload:
         self.ip = ip
         self.upload_id = 0
         self.chunks: dict[int, bytes] = {}
-    
+
+        self.last_chunk_time = datetime.now()
+
     def add_chunk(self, chunk: UploadChunk):
         if self.upload_id != chunk.upload_id:
-            self.chunks.clear()
             self.upload_id = chunk.upload_id
+            LOGGER_UPLOADS.debug(f"{self.ip:>15} | New")
+            self._cleaner("add_chunk")
 
         if not chunk.data:
             return
 
+        self.last_chunk_time = datetime.now()
         self.chunks[chunk.chunk_id] = chunk.data
         return True
 
     def save_uploaded_file(self, file_data: dict[str, str]):
         chunks_amount_from_client = self._file_data_chunks(file_data)
         amount_chunks_uploaded = len(self.chunks)
-        LOGGER_UPLOADS.debug(f"CHUNKS | {chunks_amount_from_client:>4} | {amount_chunks_uploaded:>4}")
-        
+        LOGGER_UPLOADS.debug(f"{self.ip:>15} | CHUNKS | {chunks_amount_from_client:>4} | {amount_chunks_uploaded:>4}")
         if chunks_amount_from_client and chunks_amount_from_client != amount_chunks_uploaded:
             raise ValueError("chunks missing")
 
@@ -946,9 +974,13 @@ class NewUpload:
                 for chunk in sorted_chunks:
                     f.write(chunk)
         finally:
-            self.chunks.clear()
-     
+            self._cleaner("save_uploaded_file")
+
         return LogsArchive(archive_save_path, upload_data=upload_data)
+    
+    def _cleaner(self, called_from: str="xd?"):
+        LOGGER_UPLOADS.debug(f"{self.ip:>15} | clear_chunks | {called_from}")
+        self.chunks.clear()
 
     def _correct_chunks(self, file_data):
         chunks_amount_from_client = self._file_data_chunks(file_data)
@@ -981,3 +1013,40 @@ class NewUpload:
 
         *words, ext = re.findall('([A-Za-z0-9]+)', file_name)
         return f"{'_'.join(words)}.{ext}"
+
+
+class CurrentUploads(dict[str, NewUpload]):
+    def __init__(self):
+        self.cleaner = threading.Thread(target=self._cleaner_wrap, daemon=True)
+        self.cleaner.start()
+    
+    def __missing__(self, ip: str):
+        v = self[ip] = NewUpload(ip)
+        return v
+    
+    def _cleaner(self):
+        old = datetime.now() - timedelta(seconds=30)
+        # LOGGER_UPLOADS.debug(f"CurrentUploads run")
+        for ip in list(self):
+            try:
+                if self[ip].last_chunk_time < old:
+                    self[ip]._cleaner("CurrentUploads")
+                    del self[ip]
+            except KeyError:
+                pass
+    
+    def _cleaner_wrap(self):
+        while True:
+            sleep(30)
+            try:
+                self._cleaner()
+            except Exception:
+                LOGGER_UPLOADS.exception(f"CurrentUploads exception")
+
+def main():
+    q = is_fully_processed("24-08-04--19-28--Etch--Whitemane-Frostmourne")
+    print(q)
+
+
+if __name__ == "__main__":
+    main()

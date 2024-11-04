@@ -1,9 +1,10 @@
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const CLASSES = ["Death Knight", "Druid", "Hunter", "Mage", "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior"]
-const AURAS_COLUMNS = ["ext", "self", "rekt"];
+const AURAS_COLUMNS = ["ext", "self", "rekt", "cls"];
 
 const BOSSES = {
   "Points": ["Points"],
+  "Speedrun": ["Icecrown Citadel"],
   "Icecrown Citadel": [
     "The Lich King",
     "Lord Marrowgar", "Lady Deathwhisper", "Deathbringer Saurfang",
@@ -19,12 +20,14 @@ const BOSSES = {
   "The Eye of Eternity": ["Malygos"],
   "The Obsidian Sanctum": ["Sartharion"],
   "Naxxramas": [
-    "Anub'Rekhan", "Grand Widow Faerlina", "Maexxna", "Noth the Plaguebringer", "Heigan the Unclean",
-    "Loatheb", "Patchwerk", "Grobbulus", "Gluth", "Thaddius", "Instructor Razuvious", "Gothik the Harvester",
-    "The Four Horsemen", "Sapphiron", "Kel'Thuzad"
+    "Anub'Rekhan", "Grand Widow Faerlina", "Maexxna",
+    "Noth the Plaguebringer", "Heigan the Unclean", "Loatheb",
+    "Patchwerk", "Grobbulus", "Gluth", "Thaddius",
+    "Instructor Razuvious", "Gothik the Harvester", "The Four Horsemen",
+    "Sapphiron", "Kel'Thuzad"
   ],
   "Ulduar": [
-    "Flame Leviathan", "Ignis the Furnace Master", "Razorscale", "XT-002 Deconstructor",
+    "Ignis the Furnace Master", "Razorscale", "XT-002 Deconstructor",
     "Assembly of Iron", "Kologarn", "Auriaya", "Hodir", "Thorim", "Freya", "Mimiron",
     "General Vezax", "Yogg-Saron", "Algalon the Observer"
   ],
@@ -135,69 +138,11 @@ const SPECS_SELECT_OPTIONS = {
   "Warrior": ["Arms", "Fury", "Protection"]
 }
 
-const AURAS_ICONS = {
-  "1604": "spell_frost_stun",
-  "2825": "spell_nature_bloodlust",
-  "10060": "spell_holy_powerinfusion",
-  "19753": "spell_nature_timestop",
-  "23060": "inv_misc_birdbeck_01",
-  "28494": "inv_potion_109",
-  "28507": "inv_potion_108",
-  "28714": "inv_misc_herb_flamecap",
-  "29166": "spell_nature_lightning",
-  "32182": "ability_shaman_heroism",
-  "44335": "spell_arcane_arcane04",
-  "49016": "spell_deathknight_bladedarmor",
-  "51605": "spell_shadow_shadowworddominate",
-  "51777": "spell_arcane_teleportironforge",
-  "51800": "inv_misc_head_dragon_blue",
-  "53762": "inv_alchemy_elixir_empty",
-  "53908": "inv_alchemy_elixir_04",
-  "53909": "inv_alchemy_elixir_01",
-  "54646": "spell_arcane_studentofmagic",
-  "54758": "spell_shaman_elementaloath",
-  "57933": "ability_rogue_tricksofthetrade",
-  "63848": "ability_rogue_hungerforblood",
-  "66283": "spell_shadow_shadowmend",
-  "67108": "ability_mage_netherwindpresence",
-  "67215": "spell_shadow_darkritual",
-  "67218": "spell_holy_searinglightpriest",
-  "67907": "spell_shadow_soothingkiss",
-  "68125": "spell_fire_felimmolation",
-  "69065": "inv_misc_bone_03",
-  "69279": "spell_shadow_creepingplague",
-  "69762": "spell_arcane_focusedpower",
-  "70157": "spell_frost_frozencore",
-  "71237": "ability_creature_cursed_03",
-  "71265": "ability_rogue_shadowdance",
-  "71289": "inv_belt_18",
-  "71340": "spell_shadow_destructivesoul",
-  "71531": "ability_warlock_improvedsoulleech",
-  "72550": "inv_misc_herb_evergreenmoss",
-  "72553": "achievement_boss_festergutrotface",
-  "72620": "ability_creature_cursed_01",
-  "72833": "spell_holiday_tow_spicecloud",
-  "72838": "ability_warlock_chaosbolt",
-  "72856": "spell_shadow_corpseexplode",
-  "73020": "ability_creature_cursed_01",
-  "73023": "ability_creature_disease_02",
-  "74118": "inv_inscription_inkgreen03",
-  "74119": "inv_inscription_inkorange01",
-  "74297": "spell_deathknight_strangulate",
-  "74384": "ability_golemthunderclap",
-  "74456": "inv_misc_orb_05",
-  "74509": "spell_fire_playingwithfire",
-  "74531": "ability_criticalstrike",
-  "74567": "spell_fire_sealoffire",
-  "74795": "spell_shadow_sealofkings"
-}
-
 export {
   BOSSES,
   CLASSES,
   SPECS,
   SPECS_SELECT_OPTIONS,
   AURAS_COLUMNS,
-  AURAS_ICONS,
   MONTHS,
 }

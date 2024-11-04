@@ -3,36 +3,42 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from sys import platform
-from threading import Thread, RLock
+from threading import RLock
+from urllib.request import urlopen
 
 THREAD_LOCK = RLock()
-PATH = Path(__file__).parent
+PATH = Path(__file__).resolve().parent
 LINK_7Z_DL_PREFIX = "https://www.7-zip.org/a"
 TABLE_BORDER = '-------------------'
 
+
+class _File:
+    def __init__(self, file_name: str):
+        self.file_name = file_name
+        self.url = f"{LINK_7Z_DL_PREFIX}/{self.file_name}"
+        self.path = PATH / self.file_name
+
+    def download(self):
+        with urlopen(self.url) as response:
+            self.path.write_bytes(response.read())
+
 class _SevenZipLinux:
-    __executable = "7zz"
-    __portable = "7z2301-linux-x64.tar.xz"
-    executable_path = PATH / __executable
-    dl_cmd = (
-        ('apt', 'install', 'wget'),
-        ('wget', f'{LINK_7Z_DL_PREFIX}/{__portable}'),
-        ('tar', '-xf', __portable, __executable),
-        ('rm', __portable),
-    )
+    executable = _File("7zz")
+    portable = _File("7z2408-linux-x64.tar.xz")
+    extract_command = ("tar", "-xf", portable.path, "-C", executable.path.parent, executable.file_name)
+    required_downloads = [
+        portable,
+    ]
 
 class _SevenZipWindows:
-    __executable = "7z.exe"
-    __portable = "7zr.exe"
-    __installer = "7z2301-x64.exe"
-    executable_path = PATH / __executable
-    dl_cmd = (
-        ('powershell', '-command', 'wget', f'{LINK_7Z_DL_PREFIX}/{__portable}', '-O', __portable),
-        ('powershell', '-command', 'wget', f'{LINK_7Z_DL_PREFIX}/{__installer}', '-O', __installer),
-        (__portable, 'e', __installer, __executable, '-y'),
-        ('rm', __portable),
-        ('rm', __installer),
-    )
+    executable = _File("7z.exe")
+    portable = _File("7zr.exe")
+    installer = _File("7z2408-x64.exe")
+    extract_command = (portable.path, "e", installer.path, f"-o{executable.path.parent}", executable.file_name, "-y")
+    required_downloads = [
+        portable,
+        installer,
+    ]
 
 class SevenZip:
     @property
@@ -45,12 +51,8 @@ class SevenZip:
             return
         
         with THREAD_LOCK:
-            try:
-                dl_thread = self._dl_thread
-            except AttributeError:
-                dl_thread = self._dl_thread = Thread(target=self._download())
-                dl_thread.start()
-            dl_thread.join()
+            if not self._exists():
+                self._download()
 
     @property
     def _7z_type(self):
@@ -68,11 +70,7 @@ class SevenZip:
     
     @property
     def executable_path(self):
-        return self._7z_type.executable_path
-    
-    @property
-    def dl_cmd(self):
-        return self._7z_type.dl_cmd
+        return self._7z_type.executable.path
 
     def _exists(self):
         try:
@@ -81,18 +79,31 @@ class SevenZip:
             return False
 
     def _download(self):
-        for command in self.dl_cmd:
-            if command[0] == "rm":
-                file = PATH / command[1]
-                file.unlink()
-                continue
-            
-            return_code = subprocess.call(command)
-            if return_code != 0:
-                raise RuntimeError(f"Download script ran with errors. Last command: {command}")
-
+        try:
+            self._download_required_files()
+            self._extract_executable()
+        finally:
+            self._remove_downloaded_files()
+        
         if not self._exists():
             raise RuntimeError("Somehow 7z is still missing")
+        
+    def _download_required_files(self):
+        print("7Zip: Downloading")
+        for file in self._7z_type.required_downloads:
+            file.download()
+    
+    def _extract_executable(self):
+        print("7Zip: Extracting")
+        extract_command = self._7z_type.extract_command
+        return_code = subprocess.call(extract_command)
+        if return_code != 0:
+            raise RuntimeError(f"Extraction failed | {extract_command}")
+    
+    def _remove_downloaded_files(self):
+        for file in self._7z_type.required_downloads:
+            if file.path.is_file():
+                file.path.unlink()
 
 
 class SevenZipLine:
@@ -238,11 +249,11 @@ class SevenZipArchiveInfo(SevenZip):
             if TABLE_BORDER in line:
                 continue
 
-            z = re.findall(re_string, line)[0]
-            z = [x.strip() for x in z]
             try:
-                yield SevenZipLine(*z)
-            except ValueError:
+                row = re.findall(re_string, line)[0]
+                columns = [column.strip() for column in row]
+                yield SevenZipLine(*columns)
+            except (IndexError, ValueError):
                 pass
 
 
@@ -269,9 +280,8 @@ class SevenZipArchive(SevenZipArchiveInfo):
 
 
 def _test1():
-    # q = SevenZip()
-    # print(q)
-    q = SevenZipArchiveInfo(r"F:\Python\uwulogs\uploads\1\46.247.212.239--24-03-12--09-54-04--11_03_202_Marr_n_txt.zip")
+    p = PATH.joinpath("temp", "test.7z")
+    q = SevenZipArchiveInfo(p)
     print(q.path)
     for line in q.archive_info:
         print(line)

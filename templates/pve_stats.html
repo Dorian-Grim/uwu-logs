@@ -1,9 +1,9 @@
 {% extends "layout.html" %}
 {% block scripts_head %}
-<script src="/static/pve_stats.js" async defer></script>
+<script src="/static/pve_stats.js?v=240814-1" async defer></script>
 {% endblock scripts_head %}
 {% block add_css_file %}
-<link rel="stylesheet" type="text/css" href="/static/pve_stats.css">
+<link rel="stylesheet" type="text/css" href="/static/pve_stats.css?v=240814-1">
 {% endblock add_css_file %}
 
 {% block the_main %}
@@ -32,8 +32,8 @@
       <table>
         <tbody id="stats-tbody">
           {% for spec_info in SPECS_BASE %}
-          <tr class="stats-cell-row {{ spec_info['class_html'] }}" id="{{ spec_info['spec_html'] }}" data-class="{{ spec_info['class_name'] }}" data-spec="{{ spec_info['spec_name'] }}">
-            <td class="stats-cell-name" title="{{ spec_info['class_name'] }}"><img src="/static/icons/{{ spec_info['icon'] }}.jpg">{{ spec_info['spec_name'] }}</td>
+          <tr class="stats-cell-row {{ spec_info.class_name_html }}" id="{{ spec_info.html_name }}" data-spec="{{ spec_info.name }}">
+            <td class="stats-cell-name"><img src="/static/icons/{{ spec_info.icon }}.jpg">{{ spec_info.name }}</td>
             <td class="stats-cell-data"></td>
           </tr>
           {% endfor %}
@@ -43,17 +43,17 @@
     <div id="table-sort">
       <span>Sort by:</span>
       <button class="top50"><span></span>50%</button>
-      <button class="top75"><span></span>75%</button>
-      <button class="top90"><span></span>90%</button>
-      <button class="top95"><span></span>95%</button>
-      <button class="top99"><span></span>99%</button>
-      <button class="top100">👑 Top 1</button>
+      <button class="top75"><span></span>25%</button>
+      <button class="top90"><span></span>10%</button>
+      <button class="top95"><span></span>5%</button>
+      <button class="top99"><span></span>1%</button>
+      <button class="top100">👑 1</button>
     </div>
 	</section>
   <aside id="the-tooltip" style="display: none;">
     <table>
       <thead>
-        <tr><td colspan="3" id="tooltip-spec-info"></td></tr>
+        <tr><td colspan="3" id="tooltip-spec-info"><img><span></span></td></tr>
         <tr class="column-names"><td></td><td>Raids</td><td>DPS</td></tr>
       </thead>
       <tbody id="tooltip-body">

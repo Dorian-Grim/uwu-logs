@@ -1,5 +1,24 @@
 import re
 
+from c_path import Directories, Files
+
+SERVERS = {
+    "0x06": "Lordaeron",
+    "0x07": "Icecrown",
+    "0x0D": "Frostmourne3",
+    "0x0C": "Frostmourne2",
+    "0x0A": "Blackrock",
+    "0x0E": "Onyxia",
+}
+SERVERS_WC = {
+    "WoW-Circle-x100": "6",
+    "WoW-Circle-x1":   "2",
+    "WoW-Circle-x5":   "1",
+    "WoW-Circle-Fun":  "13",
+}
+SERVERS_NAMES = set(SERVERS.values())
+
+
 class ServerID:
     __slots__ = "name", "re_string"
 
@@ -38,21 +57,44 @@ SERVERS_OTHER = [
     ServerID("NaerZone", "(naer.*?zone)"),
     ServerID("Way of Elendil", "(way.*?elendil)"),
     ServerID("WoW Brasil", "(wow.*?brasil)"),
+    ServerID("Aequitas", "(aequitas)"),
+    ServerID("Everlook", "(everlook)"),
     # ServerName("", ""),
 ]
 
-def server_cnv(server: str) -> None:
+def server_cnv(server: str):
     if not server:
-        return None
+        return ""
+    if server in SERVERS_NAMES:
+        return server
+    if server in SERVERS_WC:
+        return server
     
     _server_l = server.lower()
     for _server in SERVERS_OTHER:
         if re.findall(_server.re_string, _server_l):
             return _server.no_space
 
-    return None
+    return server.replace(" ", "-").title()
+
+
+@Directories.top.cache_until_new_self
+def _get_servers(folder):
+    s = set((
+        file_path.stem
+        for file_path in folder.iterdir()
+        if file_path.suffix == ".db"
+    ))
+    SERVERS_MAIN = Files.server_main.json_cached_ignore_error()
+    new = sorted(s - set(SERVERS_MAIN))
+    return SERVERS_MAIN + new
+
+def get_servers() -> list[str]:
+    return _get_servers()
 
 def test1():
+    z = server_cnv("Lordaeron")
+    print(z)
     z = server_cnv("Wow Circle 3.3.5a x5")
     print(z)
     z = server_cnv("rIsing godSs")

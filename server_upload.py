@@ -8,18 +8,16 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from h_debug import Loggers
-from logs_upload import LogsArchive, NewUpload, UploadChunk
-
-LOGGER_UPLOADS = Loggers.uploads
+from constants import SERVERS
+from c_path import Directories
+from logs_upload import (
+    CurrentUploads,
+    LogsArchive,
+    UploadChunk,
+)
 
 app = FastAPI()
 TEMPLATES = Jinja2Templates(directory="templates")
-
-class CurrentUploads(dict[str, NewUpload]):
-    def __missing__(self, ip: str):
-        v = self[ip] = NewUpload(ip)
-        return v
 
 class CurrentUploadsProgress(dict[str, LogsArchive]):
     ...
@@ -52,11 +50,27 @@ def check_chunk_header(request: Request):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="must include [x-upload-id] header with an integer of a chunk",
         )
+    
+    
+@Directories.top.cache_until_new_self
+def get_servers(folder):
+    print(">>>>>>>>>> get_servers")
+    s = set((
+        file_path.stem
+        for file_path in folder.iterdir()
+        if file_path.suffix == ".db"
+    ))
+    servers = s - set(SERVERS.values())
+    return sorted(servers)
 
 @app.get("/upload", response_class=HTMLResponse)
 async def upload_get(request: Request):
     return TEMPLATES.TemplateResponse(
-        request=request, name="upload.html"
+        request=request,
+        name="upload.html",
+        context={
+            "SERVERS": get_servers(),
+        }
     )
 
 @app.post("/upload")
@@ -104,7 +118,7 @@ async def upload_progress(request: Request, response: Response):
     ip = real_ip(request)
     uploads_progress = CURRENT_UPLOADS_PROGRESS.get(ip)
     if uploads_progress is None:
-        response.status_code = status.HTTP_404_NOT_FOUND
+        response.status_code = status.HTTP_204_NO_CONTENT
         return
         
     if not uploads_progress.thread.is_alive():
@@ -122,6 +136,10 @@ if __name__ == "__main__":
     from h_other import Ports
 
     app.mount("/static", StaticFiles(directory="static"))
+
+    @app.get("/")
+    def root_path():
+        return RedirectResponse("/upload")
 
     @app.exception_handler(404)
     def not_found_exception_handler(request: Request, exc: HTTPException):

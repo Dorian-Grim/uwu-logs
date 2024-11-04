@@ -1,11 +1,19 @@
 {% extends "layout.html" %}
 
 {% block scripts_head %}
-<script src="/static/character.js?240317-1" type="module" async></script>
+<link rel="modulepreload" href="/static/char_parser.js?v=240831-1" />
+<link rel="modulepreload" href="/static/constants.js?v=240830-1" />
+<link rel="modulepreload" href="/static/gear_cache.js?v=240831-1" />
+<link rel="modulepreload" href="/static/gear_constants.js?v=240814-1" />
+<link rel="modulepreload" href="/static/character.js?v=240831-1" />
+<link rel="modulepreload" href="/static/gear_tooltip.js?v=240831-1" />
+
+<script type="module" src="/static/character.js?v=240831-1"></script>
+<script type="module" src="/static/gear_tooltip.js?v=240831-1"></script>
 {% endblock scripts_head %}
 
 {% block add_css_file %}
-<link rel="stylesheet" type="text/css" href="/static/character.css?240317-1">
+<link rel="stylesheet" type="text/css" href="/static/character.css?v=240814-1">
 {% endblock add_css_file %}
 
 {% block the_main %}

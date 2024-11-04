@@ -1,4 +1,3 @@
-import threading
 from datetime import datetime
 
 from flask import (
@@ -12,17 +11,10 @@ from flask import (
 from werkzeug.exceptions import NotFound, TooManyRequests
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# import test_prev_kills
-import logs_item_parser
-import logs_ench_parser
-
 import h_cleaner
-import logs_top_statistics
-import file_functions
 import logs_calendar
 import logs_main
-import logs_top_db
-from constants import FLAG_ORDER, GEAR
+from constants import FLAG_ORDER
 from c_bosses import ALL_FIGHT_NAMES
 from c_path import Directories, Files
 from h_datetime import MONTHS, T_DELTA
@@ -60,8 +52,6 @@ CLEANER = h_cleaner.MemoryCleaner(OPENED_LOGS)
 LOGGER_CONNECTIONS = Loggers.connections
 LOGGER_CONNECTIONS.debug("Starting server...")
 
-DB_LOCK = threading.RLock()
-
 def add_log_entry(ip, method, msg):
     LOGGER_CONNECTIONS.info(f"{ip:>15} | {method:<7} | {msg}")
 
@@ -73,8 +63,8 @@ def load_report(report_id: str):
         report.last_access = now
         return report
     
-    if _validate:
-        _limit = _validate.rate_limited_reports(ip, report_id)
+    if _validate is not None:
+        _limit = _validate.rate_limited_reports(ip, "report", report_id)
         if _limit:
             add_log_entry(ip, "SPAM", report_id)
             raise TooManyRequests(retry_after=_limit)
@@ -86,30 +76,6 @@ def load_report(report_id: str):
 
     report.last_access = now
     return report
-
-def get_formatted_query_string():
-    query = request.query_string.decode()
-    if not query:
-        return ""
-    return f"?{query}"
-
-def render_template_cache(file: str, **kwargs):
-    path = kwargs.get("PATH", "")
-    query = kwargs.get("QUERY", "")
-    page = render_template(
-        file,
-        **kwargs,
-    )
-    pages = CACHED_PAGES.setdefault(path, {})
-    pages[query] = page
-    return page
-
-def render_template_wrap(file: str, **kwargs):
-    return render_template(
-        file,
-        **kwargs,
-    )
-
 
 @SERVER.errorhandler(404)
 def method404(e):
@@ -143,20 +109,8 @@ def method500(e):
 
 @SERVER.route("/pw_validate", methods=["POST"])
 def pw_validate():
-    if not _validate:
-        return ""
+    return _validate and _validate.check(request)
     
-    if _validate.pwcheck.banned(request.remote_addr):
-        return "", 403
-
-    if _validate.pw(request):
-        resp = make_response('Success')
-        _validate.set_cookie(resp)
-        return resp
-    
-    attempts_left = _validate.pwcheck.attempts_left(request.remote_addr)
-    return f'{attempts_left}', 401
-
 def get_incoming_connection_info():
     path = request.path
     
@@ -186,6 +140,13 @@ def log_exists(report_id: str):
             return False
     return True
 
+def format_report_server(report_id: str):
+    server = report_id.rsplit("--", 1)[-1]
+    server_old = server.replace(" ", "-")
+    if "WoW-Circle" in server_old:
+        server_old = "WoW-Circle"
+    return report_id.replace(server, server_old)
+
 @SERVER.before_request
 def before_request():
     log_incoming_connection()
@@ -199,33 +160,25 @@ def before_request():
         return redirect("/logs_list")
 
     if not log_exists(report_id):
-        server = report_id.rsplit("--", 1)[-1]
-        server_old = server.replace("-", " ")
-        report_id = report_id.replace(server, server_old)
+        report_id = format_report_server(report_id)
         if log_exists(report_id):
             return redirect(f"/reports/{report_id}")
         raise NotFound()
     
     if not USE_FILTER:
         pass
-    elif not _validate:
+    elif _validate is None:
         pass
-    elif report_id not in file_functions.get_privated_logs():
+    elif report_id not in Files.reports_private.text_lines():
         pass
     elif _validate.pwcheck.banned(request.remote_addr):
         if request.method == "GET":
-            return redirect("/")
+            raise NotFound
         return "", 403
     elif not _validate.cookie(request):
         if request.method == "GET":
-            return render_template('protected.html')
+            return render_template('protected.html'), 401
         return "", 403
-
-    if not SERVER.debug and request.method == "GET" and request.path in CACHED_PAGES:
-        query = get_formatted_query_string()
-        pages = CACHED_PAGES[request.path]
-        if query in pages:
-            return pages[query]
 
 
 @SERVER.route("/")
@@ -235,6 +188,18 @@ def home():
 @SERVER.route("/about")
 def about():
     return render_template('about.html')
+
+
+@Directories.top.cache_until_new_self
+def get_servers(folder):
+    s = set((
+        file_path.stem
+        for file_path in folder.iterdir()
+        if file_path.suffix == ".db"
+    ))
+    SERVERS_MAIN = Files.server_main.json_cached_ignore_error()
+    new = sorted(s - set(SERVERS_MAIN))
+    return SERVERS_MAIN + new
 
 @SERVER.route("/logs_list", methods=['GET', 'POST'])
 def show_logs_list():
@@ -273,7 +238,6 @@ def show_logs_list():
         calend_prev_last_week = calend_prev[-2]
     calend.insert(0, calend_prev_last_week)
 
-    servers = Directories.top.files_stems()
     return render_template(
         'logs_list.html',
         MONTH=new_month,
@@ -283,7 +247,7 @@ def show_logs_list():
         CURRENT_SERVER=server,
         MONTHS=LOGS_LIST_MONTHS,
         YEARS=YEARS,
-        SERVERS=servers,
+        SERVERS=get_servers(),
         ALL_FIGHT_NAMES=ALL_FIGHT_NAMES,
     )
 
@@ -406,7 +370,8 @@ def spellsearch(report_id):
     if data is None:
         data = request.form
     report = load_report(report_id)
-    return report.filtered_spell_list(data)
+    _filter = str(data.get("filter", ""))
+    return report.filtered_spell_list(_filter)
 
 @SERVER.route("/reports/<report_id>/get_dps", methods=["POST"])
 def get_dps(report_id):
@@ -542,8 +507,7 @@ def deaths(report_id):
     default_params = report.get_default_params(request)
     segments = default_params["SEGMENTS"]
 
-    guid = request.args.get("target")
-    data = report.get_deaths(segments, guid)
+    data = report.get_deaths_v2_wrap(segments)
 
     return render_template(
         'deaths.html', **default_params, **data,
@@ -561,125 +525,12 @@ def powers(report_id):
         'powers.html', **default_params, **data
     )
 
-
-@SERVER.route('/top', methods=["GET", "POST"])
-def top():
-    if request.method == "GET":
-        servers = Directories.top.files_stems()
-        return render_template(
-            'top.html',
-            SERVERS=servers,
-            REPORT_NAME="Top",
-        )
-    
-    _data: dict = request.get_json()
-
-    server = _data.get("server")
-    boss = _data.get("boss")
-    mode = _data.get("mode")
-
-    if not all({server, boss, mode}):
-        return '', 400
-    
-    with DB_LOCK:
-        top = logs_top_db.Top(**_data)
-        if boss == "Points":
-            z = top.parse_top_points()
-        else:
-            z = top.get_data()
-    response = make_response(z["data"])
-    response.headers["Content-Type"] = "application/json"
-    response.headers["Content-Encoding"] = "gzip"
-    response.headers["Content-Length"] = z["length_compressed"]
-    response.headers["Content-Length-Full"] = z["length"]
-    return response
-
-@SERVER.route('/pve_stats', methods=["GET", "POST"])
-@SERVER.route('/top_stats', methods=["GET", "POST"])
-def pve_stats():
-    if request.method == "GET":
-        servers = Directories.top.files_stems()
-        return render_template(
-            'pve_stats.html',
-            SPECS_BASE=logs_top_statistics.SPECS_DATA_NOT_IGNORED,
-            SERVERS=servers,
-        )
-    
-    _data: dict = request.get_json()
-
-    server = _data.get("server")
-    boss = _data.get("boss")
-    mode = _data.get("mode")
-
-    if not all({server, boss, mode}):
-        return '', 400
-    
-    with DB_LOCK:
-        data = logs_top_db.PveStats(server).get_data(boss, mode)
-    
-    if data is None:
-        return '', 400
-    
-    return data
-
-@SERVER.route('/character', methods=["GET", "POST"])
-def character():
-    _data: dict = request.args
-    name = _data.get("name")
-    server = _data.get("server")
-    if not name or not server:
-        name = "Safiyah"
-        server = "Lordaeron"
-    
-    name = name.title()
-    server = server.title()
-    
-    spec = _data.get("spec", type=int)
-    if spec not in range(1,4):
-        spec = None
-    
-    if request.method == "GET":
-        servers = Directories.top.files_stems()
-        return render_template(
-            'character.html',
-            NAME=name,
-            SERVERS=servers,
-            **GEAR,
-        )
-
-    with DB_LOCK:
-        d = logs_top_db.parse_player(server, name, spec=spec)
-    
-    if not d:
-        return '', 400
-    return d
-
 @SERVER.route("/ladder")
 def ladder():
     return render_template(
         'ladder.html',
         REPORT_NAME="PvE Ladder",
     )
-
-@SERVER.route("/missing/<type>/<id>", methods=["PUT"])
-def missing(type, id):
-    if _validate:
-        ip = request.remote_addr
-        url = request.url
-        _limit = _validate.rate_limited_missing(ip, url)
-        if _limit:
-            add_log_entry(ip, "SPAM", url)
-            raise TooManyRequests(retry_after=_limit)
-    
-    return_code = 400
-    if type == "item":
-        return_code = logs_item_parser.parse_and_save(id)
-    elif type == "enchant":
-        return_code = logs_ench_parser.parse_and_save(id)
-    elif type == "icon":
-        return_code = logs_item_parser.save_icon(id)
-
-    return "", return_code
 
 @SERVER.route("/raid_calendar")
 def raid_calendar():

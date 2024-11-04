@@ -14,13 +14,19 @@ class StrEnum(str, Enum):
 class DirNames(StrEnum):
     logs = "LogsDir"
     archives = "LogsRaw"
-    top = "top"
-    cache = "cache"
+    config = "config"
     static = "static"
     parsed = "parsed"
     uploads = "uploads"
     loggers = "_loggers"
     certificates = "__cert"
+    
+    temp = "temp"
+    
+    db = "db"
+    top = "top"
+    gear = "gear"
+    speedrun = "speedrun"
 
 class FileNames(StrEnum):
     reports_allowed = "__allowed.txt"
@@ -36,6 +42,13 @@ class FileNames(StrEnum):
     linux_7z_portable = "7z2301-linux-x64.tar.xz"
     windows_7z_portable = "7zr.exe"
     windows_7z_installer = "7z2301-x64.exe"
+
+    config_phase = "server_phases.json"
+    config_server_main = "servers_main.json"
+
+    logs_cut = "LOGS_CUT.zstd"
+    logs_cut_old = "LOGS_CUT.zlib"
+    logs_top = "top.json"
 
 
 class CachePath:
@@ -99,25 +112,31 @@ class _PathExt(type(Path())):
         backup_path = self.backup_path(_main=_main, _secondary=_secondary)
         if backup_path.is_dir():
             shutil.copytree(backup_path, self)
-
+        elif backup_path.is_file():
+            shutil.copy(backup_path, self)
+        else:
+            raise FileNotFoundError("Backup path doesn't exist!")
 
 class _PathExtFiles(_PathExt):
-    def _json(self) -> dict:
+    def json(self) -> dict:
         if self.is_dir():
             raise ValueError("Can't parse directory as json.")
         
         return json.loads(self.read_text())
-
-    @CachePath.infrequent_changes
-    def json(self):
-        return self._json()
     
-    @CachePath.infrequent_changes
     def json_ignore_error(self):
         try:
-            return self._json()
+            return self.json()
         except (FileNotFoundError, TypeError, json.decoder.JSONDecodeError):
             return {}
+
+    @CachePath.infrequent_changes
+    def json_cached(self):
+        return self.json()
+    
+    @CachePath.infrequent_changes
+    def json_cached_ignore_error(self):
+        return self.json_ignore_error()
     
     def json_write(self, data, indent: int=None, condensed: bool=False):
         separators = (',', ':') if condensed else None
@@ -193,12 +212,19 @@ class Directories(dict[str, PathExt]):
     main = PathExt(__file__).resolve().parent
     logs = main / DirNames.logs
     archives = main / DirNames.archives
-    top = main / DirNames.top
-    cache = main / DirNames.cache
+    config = main / DirNames.config
     static = main / DirNames.static
     parsed = main / DirNames.parsed
     loggers = main / DirNames.loggers
+    speedrun = main / DirNames.speedrun
     certificates = main / DirNames.certificates
+
+    temp = main / DirNames.temp
+
+    db = main / DirNames.db
+    top = db / DirNames.top
+    speedrun = db / DirNames.speedrun
+    gear = db / DirNames.gear
     
     uploads = main / DirNames.uploads
     uploaded = uploads / "uploaded"
@@ -222,6 +248,9 @@ class Files(dict[str, PathExt]):
 
     cert_domain = Directories.certificates / FileNames.cert_domain
     cert_private = Directories.certificates / FileNames.cert_private
+
+    server_phases = Directories.config / FileNames.config_phase
+    server_main = Directories.config / FileNames.config_server_main
 
 Directories.mkdirs()
 

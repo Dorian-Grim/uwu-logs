@@ -54,7 +54,8 @@
 }
 
 .table-wrap {
-  padding-bottom: 5rem;
+  padding-top: 5rem;
+  /* transform: scaleY(-1); */
 }
 .casts-section {
   padding-top: 5rem;
@@ -73,11 +74,12 @@ spells-hide spell-row:first-child :is(spell-name-data, .spell-history) {
   --event-width: calc(var(--event-width-mult) * var(--tenth-width));
   width: calc(var(--mult) * var(--duration) * 10px + 2px);
   overflow-y: clip;
+  /* transform: scaleY(-1); */
 }
 .spell-row {
   --row-targets: 1;
   display: block;
-  height: calc(var(--row-targets) * var(--row-height-border));
+  /* height: calc(var(--row-targets) * var(--row-height-border)); */
 }
 spell-name div,
 spell-name-data,
@@ -141,6 +143,10 @@ spell-cleu {
 }
 .openned .copy {
   display: block;
+}
+.openned .copy:last-of-type {
+  margin-bottom: 1rem;
+  border-bottom: .25rem solid var(--dimmed);
 }
 
 #the-tooltip {

@@ -580,17 +580,44 @@ footer::before {
   display: block;
 }
 #fights-container .diffs {
-  z-index: 0;
+  z-index: 15;
+}
+#fights-container .segments {
+  padding-inline: .5rem;
+  z-index: 20;
 }
 
 @media (orientation: portrait) {
   #fights-container span {display:none}
   #fights-container ul:not(.segments) > li::before {
-    content: '▶';
-    float: left;
+    content: '>';
+    box-shadow: inset -.2rem 0 var(--primary-color);
+    padding-inline: 2rem;
+    font-size: 125%;
+  }
+  #fights-container .diffs li {
+    padding-block: .25rem;
+  }
+  #fights-container .diffs,
+  #fights-container .segments {
+    top: 100%;
+    left: 5rem;
   }
 }
 @media (orientation: landscape) {
+  #fights-container .diffs {
+    transform: translateY(-1rem);
+  }
+  #fights-container .diffs,
+  #fights-container .segments {
+    right: 100%;
+  }
+  #fights-container .diffs li:first-of-type {
+    padding-top: 1rem;
+  }
+  #fights-container li:last-of-type {
+    padding-bottom: 1rem;
+  }
   #fights-container ul a {
     padding-inline: 1em;
   }
@@ -846,11 +873,13 @@ input[type="checkbox"],
 .table-wrap {
   --mult: 5;
   overflow-x: auto;
-  scrollbar-width: thin;
   scrollbar-color: var(--secondary-color) var(--background);
+	/* transform: rotateX(180deg); */
 }
 .table-wrap > div {
   padding-left: calc(clamp(var(--min-width), 20vw, var(--max-width)));
+	/* transform: rotateX(-180deg); */
+  /* padding-bottom: 7rem; */
 }
 .casts-section-wrap {
   width: calc(var(--mult) * 50rem);

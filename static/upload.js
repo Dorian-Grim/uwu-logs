@@ -95,7 +95,7 @@ class UploadProgress extends XMLHttpRequest {
   }
 
   upload_progress() {
-    if (this.status === 404) {
+    if (this.status === 204) {
       console.log("upload_progress reset");
       return;
     }
@@ -212,13 +212,20 @@ class Upload extends XMLHttpRequest {
     
     setTimeout(() => this.send_new_chunk_wrap(), 1000);
   }
+  get_error_msg() {
+    const t = this.getResponseHeader("content-type");
+    if (t == "application/json") {
+      const response_json = JSON.parse(this.response);
+      return response_json.detail;
+    }
+    return "Server encountered unknown error!  Why can't it just work?";
+  }
   upload_error() {
-    console.log('upload_error');
-    const response_json = JSON.parse(this.response);
-    console.log(response_json);
+    const error = this.get_error_msg();
+    console.log("upload_error", error);
     PROGRESS_BAR.classList.add("error");
     PROGRESS_BAR_PERCENTAGE.textContent = "Server error!";
-    new_status_msg(response_json.detail);
+    new_status_msg(error);
   }
   uploaded_bytes() {
     const t = this.current_chunk * CHUNK_SIZE;
@@ -243,12 +250,13 @@ FILE_SELECT.value = "";
 FILE_SELECT.accept = ALLOWED_EXTENSIONS.map(e => `.${e}`);
 FILE_SELECT.onchange = () => {
   const file = FILE_SELECT.files[0];
+  console.log(file);
   const ext = file.name.split('.').pop().toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(ext) || file.type == "text/plain") {
     alert('File is not an archive.\nPlease archive the file first.');
     FILE_SELECT.value = "";
   } else if (file.size < 16*1024) {
-    alert('Archive is too small, did you archive correct file?');
+    alert('Archive is too small, did you archive correct file?\nTry to archive without compression.');
     FILE_SELECT.value = "";
   } else if (file.size > 1024**4) {
     alert("Archive is too big.\nAre you sure it's the correct file?\nAre you sure you compressed it?");

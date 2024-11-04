@@ -3,7 +3,7 @@ from time import perf_counter
 
 from c_path import Directories
 
-LOGGING_FORMAT_DEFAULT = '''%(asctime)s | %(levelname)-8s | %(filename)18s:%(lineno)-4s | %(message)s'''
+LOGGING_FORMAT_DEFAULT = '''%(asctime)s | %(levelname)-8s | %(filename)22s:%(lineno)-4s | %(message)s'''
 LOGGING_FORMAT = {
     "connections" : '''%(asctime)s | %(message)s''',
 }
@@ -33,9 +33,13 @@ class Loggers(dict[str, logging.Logger]):
     memory = setup_logger('memory')
     archives = setup_logger("archives")
     player_queue = setup_logger('player_queue')
-    ladder = setup_logger('ladder')
+    ladder_watchdog = setup_logger('ladder_watchdog')
     ladder_parser = setup_logger('ladder_parser')
     missing = setup_logger('missing')
+    top = setup_logger('top')
+    gear = setup_logger('gear')
+
+    raging_gods = setup_logger("raging_gods")
 
 def get_ms(timestamp):
     if timestamp is None:

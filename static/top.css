@@ -35,9 +35,18 @@ th {
 th.sortable {
   cursor: pointer;
 }
+.table-auras::after {
+  content: attr(data-short);
+}
 @media (orientation: landscape) {
   th {
     top: calc(var(--nav-height) + 6rem + var(--padding-top) * 2);
+  }
+  .table-auras {
+    min-width: 2rem;
+  }
+  .table-auras::after {
+    content: attr(data-full);
   }
 }
 
@@ -59,7 +68,8 @@ td:is(.table-dmg, .table-dps) {
   text-align: right;
 }
 td.table-r {
-	min-width: 4.2rem;
+	min-width: 4.75rem;
+  text-align: right;
 }
 td.table-t {
 	min-width: 2.6rem;
@@ -71,6 +81,12 @@ td.table-n {
   overflow: hidden;
   white-space: nowrap;
   --min-width: 3rem;
+}
+#table-speedrun td.table-n {
+  width: 17rem;
+}
+td.table-dummy-name {
+  width: 1rem;
 }
 td.table-n a {
   text-shadow: 0 0 3em currentColor;
@@ -93,14 +109,21 @@ tbody > tr:nth-child(odd) > td {
 }
 
 @media (orientation: portrait) {
+  .table-cls {
+    display: none;
+  }
+}
+
+
+@media (orientation: portrait) {
   td.table-n {
-    max-width: calc(100vw - 21.5rem);
+    max-width: calc(100vw - 21rem);
   }
   td.table-n {
     --min-width: 2.5rem;
   }
   td {
-    padding-inline: .15rem;
+    padding-inline: .1rem;
   }
 }
 
@@ -157,10 +180,13 @@ input:disabled + label {
 
 @media (orientation: landscape) {
   #controls {
-    padding-inline: 5rem;
+    /* padding-inline: 5rem; */
     grid-template-areas:
     'inst inst boss boss boss boss size diff diff'
     'serv serv clss clss spec spec spec comb comb';
+  }
+  #controls-wrap {
+    padding-inline: 5rem;
   }
 }
 
@@ -178,12 +204,12 @@ input:disabled + label {
   min-width: fit-content;
   text-align: right;
 }
-#the-tooltip td:nth-child(2) {
-  min-width: 1.5em;
+#the-tooltip td.count {
+  min-width: 2rem;
 }
-#the-tooltip td:nth-child(3) {
-  min-width: 3em;
+#the-tooltip td.uptime {
+  min-width: 3rem;
 }
-.hidden {
+#the-tooltip tr.hidden {
   display: none;
 }

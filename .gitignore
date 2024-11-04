@@ -2,6 +2,7 @@ _*
 legacy*
 test*
 q_*
+w_*
 x_*
 *.7z
 *.db
@@ -12,15 +13,20 @@ x_*
 *.old
 *.pem
 *.zip
-db*.*
 
 .*/
 bkup/
 cache/
+db/
 LogsDir/
 LogsRaw/
+nginx/
 parsed/
+static/enchant/
+static/icons/
+static/item/
+static/gear/
+temp/
 top/
 uploads/
-static/icons/
 venv/

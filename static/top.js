@@ -3,67 +3,117 @@ import {
   CLASSES,
   SPECS,
   SPECS_SELECT_OPTIONS,
-  AURAS_COLUMNS,
-  AURAS_ICONS,
   MONTHS,
-} from "./constants.js"
+} from "./constants.js?v=240909-1";
 
-const selectServer = document.getElementById('select-server');
-const selectInstance = document.getElementById('select-instance');
-const selectBoss = document.getElementById('select-boss');
-const selectSize = document.getElementById('select-size');
-const selectClass = document.getElementById('select-class');
-const selectSpec = document.getElementById('select-spec');
-const checkboxDifficulty = document.getElementById('checkbox-difficulty');
-const checkboxCombine = document.getElementById('checkbox-combine');
+console.time("aura_icons fetch");
+const AURAS_ICONS = await fetch("/static/aura_icons.json").then(response => response.json());
+console.timeEnd("aura_icons fetch");
+
+const SELECT_SERVER = document.getElementById('select-server');
+const SELECT_RAID = document.getElementById('select-instance');
+const SELECT_BOSS = document.getElementById('select-boss');
+const SELECT_SIZE = document.getElementById('select-size');
+const SELECT_CLASS = document.getElementById('select-class');
+const SELECT_SPEC = document.getElementById('select-spec');
+const CHECKBOX_DIFFICULTY = document.getElementById('checkbox-difficulty');
+const CHECKBOX_COMBINE = document.getElementById('checkbox-combine');
+
+const TABLE_TOP = document.getElementById("table-top");
+const TABLE_POINTS = document.getElementById("table-points");
+const TABLE_SPEEDRUN = document.getElementById("table-speedrun");
+const PROGRESS_BAR = document.getElementById('upload-progress-bar');
+const PROGRESS_BAR_PERCENTAGE = document.getElementById('upload-progress-bar-percentage');
+const TABLE_CONTAINER = document.getElementById('table-container');
+const LOADING_INFO = document.getElementById('loading-info');
+const LOADING_INFO_PANEL = document.getElementById('loading-info-panel');
+const TOGGLE_TOTAL_DAMAGE = document.getElementById('toggle-total-damage');
+const TOGGLE_USEFUL_DAMAGE = document.getElementById('toggle-useful-damage');
+const TOGGLE_LIMIT = document.getElementById('toggle-limit');
+const THE_TOOLTIP = document.getElementById("the-tooltip");
+const THE_TOOLTIP_BODY = document.getElementById("tooltip-body");
+const SECTION_NO_DATA = document.getElementById("no-data");
+const SECTION_ON_ERROR = document.getElementById("on-error");
+const SECTION_ON_ERROR_DETAILS = document.getElementById("on-error-details");
+
+const HEAD_USEFUL_DPS_ID = "head-useful-dps";
+const HEAD_SPEEDRUN_TOTAL_LENGTH_ID = "head-speedrun-total-length";
+
+const AURAS_CURRENT_COLUMNS = Array.from(document.querySelectorAll("thead .table-auras")).map(e => e.classList[1]);
+const AURA_INDEX_TO_COLUMN_NAME = {
+  0: "table-ext",
+  1: "table-self",
+  2: "table-rekt",
+  3: "table-cls",
+}
 
 const INTERACTABLES = {
-  server: selectServer,
-  raid: selectInstance,
-  boss: selectBoss,
-  size: selectSize,
-  mode: checkboxDifficulty,
-  best: checkboxCombine,
-  cls: selectClass,
-  spec: selectSpec,
+  server: SELECT_SERVER,
+  raid: SELECT_RAID,
+  boss: SELECT_BOSS,
+  size: SELECT_SIZE,
+  mode: CHECKBOX_DIFFICULTY,
+  best: CHECKBOX_COMBINE,
+  cls: SELECT_CLASS,
+  spec: SELECT_SPEC,
 };
 
-const tableTop = document.getElementById("table-top");
-const tablePoints = document.getElementById("table-points");
-const progressBar = document.getElementById('upload-progress-bar');
-const progressBarPercentage = document.getElementById('upload-progress-bar-percentage');
-const tableContainer = document.getElementById('table-container');
-const loadingInfo = document.getElementById('loading-info');
-const loadingInfoPanel = document.getElementById('loading-info-panel');
-const headUsefulDps = document.getElementById('head-useful-dps');
-const toggleTotalDamage = document.getElementById('toggle-total-damage');
-const toggleUsefulDamage = document.getElementById('toggle-useful-damage');
-const toggleLimit = document.getElementById('toggle-limit');
-const theTooltip = document.getElementById("the-tooltip");
-const theTooltipBody = document.getElementById("tooltip-body");
+const LOCAL_STORAGE = {
+  keys: {
+    [SELECT_SERVER.id]: "top_server",
+    [SELECT_RAID.id]: "top_raid",
+    [SELECT_BOSS.id]: "top_boss",
+    [SELECT_CLASS.id]: "top_class",
+    [SELECT_SPEC.id]: "top_spec",
+    [TOGGLE_TOTAL_DAMAGE.id]: "top_total",
+    [TOGGLE_USEFUL_DAMAGE.id]: "top_useful",
+    [TOGGLE_LIMIT.id]: "top_limit",
+  },
+  get(elm) {
+    const key = this.convert_key(elm);
+    return localStorage.getItem(key);
+  },
+  set(elm, value) {
+    const key = this.convert_key(elm);
+    return localStorage.setItem(key, value);
+  },
+  convert_key(elm) {
+    return this.keys[elm.id];
+  },
+}
 
 const IRRELEVANT_FOR_POINTS = [
-  selectSize,
-  checkboxDifficulty,
-  checkboxCombine,
-  toggleTotalDamage,
-  toggleUsefulDamage,
+  SELECT_SIZE,
+  CHECKBOX_COMBINE,
+  TOGGLE_TOTAL_DAMAGE,
+  TOGGLE_USEFUL_DAMAGE,
+];
+const IRRELEVANT_FOR_SPEEDRUN = [
+  SELECT_SIZE,
+  SELECT_CLASS,
+  SELECT_SPEC,
+  CHECKBOX_COMBINE,
+  TOGGLE_TOTAL_DAMAGE,
+  TOGGLE_USEFUL_DAMAGE,
 ];
 
 const ROW_LIMIT = 1000;
 const is_landscape = window.matchMedia("(orientation: landscape)");
 const TOP_POST = window.location.pathname;
-const xrequest = new XMLHttpRequest();
-const HAS_HEROIC = new Set([
-  ...BOSSES["Icecrown Citadel"],
-  ...BOSSES["Trial of the Crusader"],
+const BOSSES_WITH_HEROIC_MODE = new Set([
   "Halion",
-  "Points",
+]);
+const RAID_WITH_HEROIC_MODE = new Set([
+  "Icecrown Citadel",
+  "Trial of the Crusader",
 ]);
 const POINTS = [100, 99, 95, 90, 75, 50, 25, 0];
 const DEFAULT_SPEC = [3, 1, 2, 2, 3, 3, 2, 1, 2, 2];
 const SORT_VARS = {
-  column: headUsefulDps,
+  last_column_sort: {
+    [TABLE_TOP.id]: HEAD_USEFUL_DPS_ID,
+    [TABLE_SPEEDRUN.id]: HEAD_SPEEDRUN_TOTAL_LENGTH_ID,
+  },
   reversed: false,
 };
 const DATA_KEYS = {
@@ -76,88 +126,127 @@ const DATA_KEYS = {
   duration: "t",
   auras: "a",
 }
-const CACHE = {
-  lastQuery: "",
-  set_new_data(data) {
-    const query = make_query();
-    if (query == this.lastQuery) {
-      this[query] = data;
-    }
-  },
-  get_current() {
-    const query = make_query();
-    return this[query];
-  }
-};
+const TABLES = [
+  TABLE_POINTS,
+  TABLE_TOP,
+  TABLE_SPEEDRUN,
+];
+const REQUESTS_CACHE = {};
 
-function get_icon_link(icon_name) {
-  return `/static/icons/${icon_name}.jpg`;
-}
-
-function is_heroic() {
-  return HAS_HEROIC.has(selectBoss.value) && checkboxDifficulty.checked;
-}
-function is_points() {
-  return selectInstance.value == "Points";
-}
-
-function make_query() {
-  const size = selectSize.value;
-  const diff = is_heroic() ? 'H' : 'N';
-  const mode = `${size}${diff}`;
-  const q = {
-    server: selectServer.value,
-    boss: selectBoss.value,
-    mode: mode,
-    best_only: checkboxCombine.checked,
-    class_i: selectClass.value,
-    spec_i: selectSpec.value,
-    sort_by: SORT_VARS.column.id,
-    limit: toggleLimit.checked ? 1 : 0,
-  };
-  console.log(q);
-  return JSON.stringify(q);
-}
-
-
-function table_modify_wrap(callback) {
-  if (tableContainer.style.display == "none") return callback();
-
-  tableContainer.style.display = "none";
-  loadingInfoPanel.style.removeProperty("display");
-  setTimeout(() => {
-    callback();
-    setTimeout(() => {
-      loadingInfoPanel.style.display = "none";
-      tableContainer.style.removeProperty("display");
-    });
-  });
-}
-
-
-function create_css_rule(key) {
+function _css_rule(key) {
   const style = document.createElement("style");
   style.append(`.table-${key} {display: none}`);
   return style;
 }
-const hide_total = create_css_rule("d");
-const hide_useful = create_css_rule("u");
-
-function toggle_columns(checkbox, style) {
-  if (checkbox.checked) {
-    if (style.parentNode != document.head) return;
-    table_modify_wrap(() => document.head.removeChild(style));
-  } else if (style.parentNode != document.head) {
-    table_modify_wrap(() => document.head.appendChild(style));
+const TOGGLE_COLUMNS = {
+  css_hide_total: _css_rule("d"),
+  css_hide_useful: _css_rule("u"),
+  useful_columns() {
+    this._toggle_columns(TOGGLE_USEFUL_DAMAGE, this.css_hide_useful);
+  },
+  total_columns() {
+    this._toggle_columns(TOGGLE_TOTAL_DAMAGE, this.css_hide_total);
+  },
+  _toggle_columns(checkbox, style) {
+    if (checkbox.checked) {
+      if (style.parentNode != document.head) return;
+      this._table_modify_wrap(() => document.head.removeChild(style));
+    } else if (style.parentNode != document.head) {
+      this._table_modify_wrap(() => document.head.appendChild(style));
+    }
+  },
+  _table_modify_wrap(callback) {
+    if (TABLE_CONTAINER.style.display == "none") return callback();
+  
+    TABLE_CONTAINER.style.display = "none";
+    LOADING_INFO_PANEL.style.removeProperty("display");
+    setTimeout(() => {
+      callback();
+      setTimeout(() => {
+        LOADING_INFO_PANEL.style.display = "none";
+        TABLE_CONTAINER.style.removeProperty("display");
+      });
+    });
   }
 }
 
-function toggle_useful_columns() {
-  toggle_columns(toggleUsefulDamage, hide_useful);
+function get_icon_link(icon_name) {
+  return `/static/icons/${icon_name}.jpg`;
+}
+const DEFAULT_ICON = get_icon_link("undefined");
+const FACTIONS_ICONS = {
+  0: `/static/alliance.png`,
+  1: `/static/horde.png`,
 }
 
-function toggle_total_columns() {
-  toggle_columns(toggleTotalDamage, hide_total);
+let timeout_hide;
+let timeout_show_rows;
+let timeout_table_add_new_data;
+
+//////////////////////////////////////////
+
+function has_heroic() {
+  return RAID_WITH_HEROIC_MODE.has(SELECT_RAID.value) || BOSSES_WITH_HEROIC_MODE.has(SELECT_BOSS.value);
+}
+function toggle_difficulty_checkbox() {
+  CHECKBOX_DIFFICULTY.disabled = !has_heroic();
+}
+
+function heroic_toggled() {
+  return has_heroic() && CHECKBOX_DIFFICULTY.checked;
+}
+function points_selected() {
+  return SELECT_RAID.value == "Points";
+}
+function speedrun_selected() {
+  return SELECT_RAID.value == "Speedrun";
+}
+// function healing_toggled() {
+//   return CHECKBOX_HEALING.checked;
+// }
+
+function _make_query_top() {
+  const size = SELECT_SIZE.value;
+  const diff = heroic_toggled() ? 'H' : 'N';
+  const mode = `${size}${diff}`;
+  return {
+    server: SELECT_SERVER.value,
+    boss: SELECT_BOSS.value,
+    mode: mode,
+    best_only: CHECKBOX_COMBINE.checked,
+    class_i: SELECT_CLASS.value,
+    spec_i: SELECT_SPEC.value,
+    sort_by: SORT_VARS.last_column_sort[TABLE_TOP.id],
+    limit: TOGGLE_LIMIT.checked ? 1000 : 10000,
+  };
+}
+
+function _make_query_points() {
+  return {
+    server: SELECT_SERVER.value,
+    class_i: SELECT_CLASS.value,
+    spec_i: SELECT_SPEC.value,
+    limit: TOGGLE_LIMIT.checked ? 1000 : 10000,
+  };
+}
+
+function _make_query_speedrun() {
+  return {
+    server: SELECT_SERVER.value,
+    raid: SELECT_BOSS.value,
+    sort_by: SORT_VARS.last_column_sort[TABLE_SPEEDRUN.id],
+  };
+}
+
+function _make_query() {
+  if (speedrun_selected()) return _make_query_speedrun();
+  if (points_selected()) return _make_query_points();
+    return _make_query_top();
+}
+function make_query() {
+  const q = _make_query();
+  console.log("Query:", q);
+  return JSON.stringify(q);
 }
 
 
@@ -165,96 +254,121 @@ function number_with_separator(x, sep = " ") {
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, sep);
 }
 
-function add_inner_text(cell, text) {
+function add_inner_text(element, text) {
   if (!isNaN(text)) text = number_with_separator(text);
-  cell.append(text);
+  element.append(text);
 }
 
 function cell_name(name, spec) {
   const [spec_name, spec_icon, spec_class_id] = SPECS[spec];
 
-  const cell = document.createElement('td');
-  cell.classList.add("table-n");
-  cell.title = spec_name;
+  const td = document.createElement('td');
+  td.classList.add("table-n");
+  td.title = spec_name;
 
   const img = document.createElement("img");
   img.src = get_icon_link(spec_icon);
-  cell.appendChild(img);
+  td.appendChild(img);
 
   const a = document.createElement('a');
   a.classList.add(spec_class_id);
-  a.href = `/character?name=${name}&server=${selectServer.value}&spec=${spec % 4}`;
+  a.href = `/character?name=${name}&server=${SELECT_SERVER.value}&spec=${spec % 4}`;
   a.target = "_blank";
   a.append(name);
-  cell.appendChild(a);
+  td.appendChild(a);
 
-  return cell;
+  return td;
+}
+function cell_guild(guild_name, faction) {
+  const guild_cell = document.createElement('td');
+  guild_cell.classList.add("table-n");
+  const img = document.createElement("img");
+  img.src = FACTIONS_ICONS[faction] ?? DEFAULT_ICON;
+  guild_cell.appendChild(img);
+  guild_cell.append(guild_name);
+  return guild_cell
 }
 
 function cell_dps(dps, key) {
-  const cell = document.createElement('td');
-  cell.value = dps;
-  cell.classList.add("table-dps");
-  cell.classList.add(`table-${key}`);
+  const td = document.createElement('td');
+  td.value = dps;
+  td.classList.add("table-dps");
+  td.classList.add(`table-${key}`);
   const _inside_data = dps.toFixed(1);
-  add_inner_text(cell, _inside_data);
-  return cell;
+  add_inner_text(td, _inside_data);
+  return td;
 }
 
 function cell_total(amount, key) {
-  const cell = document.createElement('td');
-  cell.value = amount;
-  cell.classList.add("table-dmg");
-  cell.classList.add(`table-${key}`);
-  add_inner_text(cell, amount);
-  // row.appendChild(cell);
-  return cell;
+  const td = document.createElement('td');
+  td.value = amount;
+  td.classList.add("table-dmg");
+  td.classList.add(`table-${key}`);
+  add_inner_text(td, amount);
+  return td;
 }
 
+function pad_duration_value(v) {
+  return v.toString().padStart(2, '0');
+}
 function format_duration(dur) {
-  const minutes = Math.floor(dur / 60);
   const seconds = Math.floor(dur % 60);
-  const m_str = minutes.toString().padStart(2, '0');
-  const s_str = seconds.toString().padStart(2, '0');
+  const s_str = pad_duration_value(seconds);
+  const minutes = Math.floor(dur / 60);
+  const m_str = pad_duration_value(minutes);
   return `${m_str}:${s_str}`;
+}
+function format_duration_hours(dur) {
+  const seconds = Math.floor(dur % 60);
+  const s_str = pad_duration_value(seconds);
+  const minutes = Math.floor(dur / 60 % 60);
+  const m_str = pad_duration_value(minutes);
+  const hours = Math.floor(dur / 3600);
+  const h_str = pad_duration_value(hours);
+  return `${h_str}:${m_str}:${s_str}`;
 }
 
 function cell_duration(value) {
-  const cell = document.createElement('td');
-  cell.value = value;
-  cell.className = `table-t`;
-  cell.append(format_duration(value));
-  return cell;
+  const td = document.createElement('td');
+  td.value = value;
+  td.className = `table-t`;
+  td.append(format_duration(value));
+  return td;
+}
+function cell_duration_hours(value) {
+  const td = document.createElement('td');
+  td.value = value;
+  td.className = `table-bt`;
+  td.append(format_duration_hours(value));
+  return td;
 }
 
 function cell_date(report_ID) {
   const report_date = report_ID.toString().slice(0, 15);
   const [year, month, day, _, hour, minute] = report_date.split('-');
   const months_str = MONTHS[month - 1];
-  const date_text = is_landscape.matches ? `${day} ${months_str} ${year} ${hour}:${minute}` : `${day}-${month}-${year}`;
+  const date_text = is_landscape.matches ? `${day} ${months_str} ${year} ${hour}:${minute}` : `${day} ${months_str} ${year}`;
 
   const a = document.createElement('a');
-  a.href = `/reports/${report_ID}--${selectServer.value}`;
+  a.href = `/reports/${report_ID}--${SELECT_SERVER.value}`;
   a.target = "_blank";
   a.append(date_text);
 
-  const cell = document.createElement('td');
-  cell.appendChild(a);
-  cell.className = `table-r`;
-  cell.value = report_date.replaceAll('-', '');
-  return cell;
+  const td = document.createElement('td');
+  td.appendChild(a);
+  td.className = `table-r`;
+  td.value = report_date.replaceAll('-', '');
+  return td;
 }
 
-let timeout_hide;
-let timeout_show_rows;
 function show_tooltip(td) {
   clearTimeout(timeout_show_rows);
   const dataset = td.dataset;
-  const sorted = Object.keys(dataset).sort();
-  const rows = Array.from(theTooltipBody.children);
-  for (const i in sorted) {
+  const keys = Object.keys(dataset);
+  const rows = Array.from(THE_TOOLTIP_BODY.children);
+  for (const i in keys) {
     const tr = rows[i];
-    const spell_id = sorted[i];
+    const spell_id = keys[i];
     const [count, uptime] = dataset[spell_id].split(',');
 
     const img = tr.querySelector("img");
@@ -267,13 +381,13 @@ function show_tooltip(td) {
   timeout_show_rows = setTimeout(() => {
     for (const i in rows) {
       const tr = rows[i];
-      if (i < sorted.length) {
+      if (i < keys.length) {
         tr.classList.remove("hidden");
       } else {
         tr.classList.add("hidden");
       }
     }
-  }, toggleLimit.checked ? 10 : 150);
+  }, TOGGLE_LIMIT.checked ? 10 : 150);
 }
 function mouseenter(event) {
   clearTimeout(timeout_hide);
@@ -281,57 +395,58 @@ function mouseenter(event) {
   show_tooltip(td);
   const bodyRect = document.body.getBoundingClientRect();
   const trRect = td.getBoundingClientRect();
-  theTooltip.style.top = `${trRect.bottom}px`;
-  theTooltip.style.right = `${bodyRect.right - trRect.left}px`;
-  theTooltip.style.removeProperty("display");
+  THE_TOOLTIP.style.top = `${trRect.bottom}px`;
+  THE_TOOLTIP.style.right = `${bodyRect.right - trRect.left}px`;
+  THE_TOOLTIP.style.removeProperty("display");
 }
 function mouseleave() {
   clearTimeout(timeout_hide);
   timeout_hide = setTimeout(() => {
-    theTooltip.style.display = "none"
+    THE_TOOLTIP.style.display = "none"
   }, 300);
 }
 
-function new_aura_columns() {
-  const cells = [];
-  const all_count = [];
-  for (const column_name of AURAS_COLUMNS) {
-    const td = document.createElement('td');
-    td.className = `table-${column_name}`;
-    cells.push(td);
-    all_count.push(0);
+function aura_cell(column_class) {
+  const td = document.createElement('td');
+  td.className = column_class;
+  return td;
+}
+function aura_column_data(column_class) {
+  return {
+    count: 0,
+    td: aura_cell(column_class),
   }
-  return [cells, all_count];
+}
+function new_aura_empty_columns() {
+  return Object.fromEntries(
+    AURAS_CURRENT_COLUMNS.map(column_class => [column_class, aura_column_data(column_class)])
+  );
+}
+function new_aura_columns(auras) {
+  const columns = new_aura_empty_columns();
+  for (const [spell_id, count, uptime, type] of auras) {
+    const column_name = AURA_INDEX_TO_COLUMN_NAME[type];
+    const column_data = columns[column_name];
+    column_data.count += count;
+    column_data.td.setAttribute(`data-${spell_id}`, `${count},${uptime}`);
+  }
+  return columns;
+}
+function* cell_auras(auras) {
+  const columns = new_aura_columns(auras);
+  for (const column_name in columns) {
+    const column_data = columns[column_name];
+    const td = column_data.td;
+    if (column_data.count != 0) {
+      td.append(column_data.count);
+      td.addEventListener("mouseleave", mouseleave);
+      td.addEventListener("mouseenter", mouseenter);
+    }
+    yield td;
+  }
 }
 
-function cell_auras(auras) {
-  const [cells, all_count] = new_aura_columns();
-  if (auras instanceof Array) {
-    for (const [spell_id, count, uptime, type] of auras) {
-      const td = cells[type];
-      td.setAttribute(`data-${spell_id}`, `${count},${uptime}`);
-      all_count[type] += count;
-    }
-  } else {
-    for (const spell_id in auras) {
-      const [count, uptime, type] = auras[spell_id];
-      const td = cells[type];
-      td.setAttribute(`data-${spell_id}`, `${count},${uptime}`);
-      all_count[type] += count;
-    }
-  }
-
-  for (let i = 0; i < all_count.length; i++) {
-    if (all_count[i] == 0) continue;
-    const td = cells[i];
-    td.append(all_count[i]);
-    td.addEventListener("mouseleave", mouseleave);
-    td.addEventListener("mouseenter", mouseenter);
-  }
-  return cells;
-}
-
-function new_row(_data) {
+function table_new_row_default(_data) {
   const row = document.createElement('tr');
   const [
     report_ID,
@@ -362,21 +477,21 @@ function points_rank_class(v) {
   for (const i of POINTS) if (v - i >= 0) return `top${i}`;
 }
 function cell_points(v, is_total) {
-  const cell = document.createElement('td');
-  cell.classList.add("table-points");
+  const td = document.createElement('td');
+  td.classList.add("table-points");
   if (!is_total) {
-    v = (v / 100).toFixed(2);
-    cell.classList.add((points_rank_class(v)));
+    v = v.toFixed(2);
+    td.classList.add((points_rank_class(v)));
   }
-  cell.append(v);
-  return cell;
+  td.append(v);
+  return td;
 }
-function new_row_points(data, spec) {
+function table_new_row_points(data, spec) {
   const row = document.createElement('tr');
   const [
+    name,
     p_relative,
     p_total,
-    name,
   ] = data;
 
   [
@@ -387,276 +502,419 @@ function new_row_points(data, spec) {
 
   return row;
 }
+function table_new_row_speedrun(data) {
+  const row = document.createElement('tr');
+  const [
+    report_id,
+    total_length,
+    segments_sum,
+    guild_name,
+    faction,
+  ] = data;
 
+  [
+    cell_guild(guild_name, faction),
+    cell_duration_hours(total_length),
+    cell_duration_hours(segments_sum),
+    cell_date(report_id),
+  ].forEach(td => row.appendChild(td));
 
-function update_progress(done, total) {
-  const percent = Math.round(done / total * 100);
-  progressBarPercentage.textContent = `${done} / ${total} (${percent}%)`;
-  progressBar.style.width = `${percent}%`;
+  return row;
 }
 
-let mainTimeout;
-function table_add_new_data(table, data) {
-  clearTimeout(mainTimeout);
-  console.time("clear table");
-  table.innerHTML = "";
-  console.timeEnd("clear table");
+
+function update_progress_bar(done, total, network) {
+  const percent = Math.round(done / total * 100);
+  if (network) {
+    done = `${(done / 1024).toFixed(1)}k`;
+    total = `${(total / 1024).toFixed(1)}k`;
+  }
+  PROGRESS_BAR_PERCENTAGE.textContent = `${done} / ${total} (${percent}%)`;
+  PROGRESS_BAR.style.width = `${percent}%`;
+}
+
+function table_new_row_wrap() {
+  const current_table = get_cur_table();
+  if (current_table == TABLE_TOP) return table_new_row_default;
+  if (current_table == TABLE_SPEEDRUN) return table_new_row_speedrun;
+  if (current_table == TABLE_POINTS) {
+    const class_i = parseInt(SELECT_CLASS.value);
+    const spec_i = parseInt(SELECT_SPEC.value);
+    const spec_full_index = class_i * 4 + spec_i;
+    return data => table_new_row_points(data, spec_full_index);
+  }
+  throw Error("no table handler found!");
+}
+
+function table_append_fragment(table_body, body_fragment) {
+  LOADING_INFO.textContent = "Rendering table...";
+  PROGRESS_BAR_PERCENTAGE.textContent = "Done!";
+
+  setTimeout(() => {
+    console.time("table_add_new_data | Rendering");
+    table_body.append(body_fragment);
+    TOGGLE_COLUMNS.useful_columns();
+    TOGGLE_COLUMNS.total_columns();
+    setTimeout(() => {
+      LOADING_INFO_PANEL.style.display = "none";
+      TABLE_CONTAINER.style.removeProperty("display");
+      console.timeEnd("table_add_new_data | Rendering");
+      console.timeEnd("table_add_new_data | Full");
+    });
+  })
+}
+function table_add_new_data(table_body, data) {
+  clearTimeout(timeout_table_add_new_data);
+  console.time("table_add_new_data | Clear Table");
+  table_body.innerHTML = "";
+  console.timeEnd("table_add_new_data | Clear Table");
   if (!data) return;
-
-  loadingInfo.textContent = "Building table...";
-  loadingInfoPanel.style.removeProperty("display");
-  const LIMIT = toggleLimit.checked ? Math.min(ROW_LIMIT, data.length) : data.length;
+  
+  console.log(data.length);
+  
   const fragment = new DocumentFragment();
-  let i = 0;
+  LOADING_INFO.textContent = "Building table...";
+  LOADING_INFO_PANEL.style.removeProperty("display");
+  const LIMIT = TOGGLE_LIMIT.checked ? Math.min(ROW_LIMIT, data.length) : data.length;
+  let current_row_index = 0;
+  const table_new_row = table_new_row_wrap();
+  console.time("table_add_new_data | Full");
 
-  const spec = parseInt(selectClass.value) * 4 + parseInt(selectSpec.value);
-  const points = i => new_row_points(data[i], spec);
-  const top = i => new_row(data[i]);
-  const _new_row = is_points() ? points : top;
-
-  console.time("tableAddRows");
   (function chunk() {
-    const end = Math.min(i + 100, LIMIT);
-    for (; i < end; i++) {
-      const row = _new_row(i);
+    update_progress_bar(current_row_index, LIMIT);
+
+    if (current_row_index >= LIMIT) return table_append_fragment(table_body, fragment);
+
+    const end = Math.min(current_row_index + 100, LIMIT);
+    for (; current_row_index < end; current_row_index++) {
+      const row = table_new_row(data[current_row_index]);
       fragment.appendChild(row);
     }
-    update_progress(i, LIMIT);
 
-    if (i < LIMIT) {
-      mainTimeout = setTimeout(chunk);
-      return;
-    }
-
-    loadingInfo.textContent = "Rendering table...";
-    progressBarPercentage.textContent = "Done!";
-
-    setTimeout(() => {
-      console.time("table_add_new_data Rendering");
-      table.append(fragment);
-      toggle_useful_columns();
-      toggle_total_columns();
-      setTimeout(() => {
-        loadingInfoPanel.style.display = "none";
-        tableContainer.style.removeProperty("display");
-        console.timeEnd("table_add_new_data Rendering");
-        console.timeEnd("tableAddRows");
-      });
-    })
+    timeout_table_add_new_data = setTimeout(chunk);
   })();
 }
+function get_cur_table() {
+  if (points_selected()) return TABLE_POINTS;
+  if (speedrun_selected()) return TABLE_SPEEDRUN;
+  return TABLE_TOP;
+}
+function hide_other_tables(current_table) {
+  TABLES.forEach(t => {
+    if (t.id != current_table.id) {
+      t.style.display = "none";
+    }
+  });
+}
 function table_add_new_data_wrap(data) {
-  tableContainer.style.display = "none";
-  let t1, t2;
-  if (is_points()) {
-    t1 = tablePoints;
-    t2 = tableTop;
-  } else {
-    t2 = tablePoints;
-    t1 = tableTop;
-  }
-  t2.style.display = "none";
-  t1.style.removeProperty("display");
-  const body = t1.querySelector("tbody");
+  TABLE_CONTAINER.style.display = "none";
+
+  const current_table = get_cur_table();
+  hide_other_tables(current_table);
+  
+  current_table.style.removeProperty("display");
+  const body = current_table.querySelector("tbody");
+
   setTimeout(() => table_add_new_data(body, data));
 }
 
-xrequest.onprogress = e => {
-  let contentLength;
-  if (e.lengthComputable) {
-    contentLength = e.total;
-  } else {
-    contentLength = parseInt(e.target.getResponseHeader('Content-Length-Full'));
+function get_post_endpoint() {
+  if (speedrun_selected()) return "/top_speedrun";
+  if (points_selected()) return "/top_points";
+  return TOP_POST;
+}
+
+const TopRequest = new class extends XMLHttpRequest {
+  constructor() {
+    super();
+
+    this.onprogress = this._onprogress;
+    this.onload = this._onload;
+    this.current_query = "";
   }
-  update_progress(e.loaded, contentLength);
-};
+  get_new_data(query) {
+    this.abort();
+    update_progress_bar(0, 1);
 
-xrequest.onreadystatechange = () => {
-  if (xrequest.status != 200 || xrequest.readyState != 4) return;
-  const parsed_json = JSON.parse(xrequest.response);
-  CACHE.set_new_data(parsed_json);
-  table_add_new_data_wrap(parsed_json);
+    this.current_query = query;
+    const post_endpoint = get_post_endpoint();
+    this.open("POST", post_endpoint);
+    this.setRequestHeader("Content-Type", "application/json");
+    console.time("TopRequest | Response");
+    this.send(query);
+  }
+  _onprogress(e) {
+    const contentLength = e.lengthComputable ? e.total : this._get_full_length();
+    update_progress_bar(e.loaded, contentLength, true);
+  }
+  _get_full_length() {
+    return parseInt(this.getResponseHeader('Content-Length-Full'));
+  }
+  _onload() {
+    console.timeEnd("TopRequest | Response");
+    LOADING_INFO_PANEL.style.display = "none";
+
+    if (this.status == 500) this.show_error("Server error!"); 
+  
+    const not_json = this.getResponseHeader("content-type") != "application/json";
+    if (not_json) return this.show_error("Server error!");
+  
+    const data_parsed = this.response_json();
+    const current_query = make_query();
+    
+    if (data_parsed.length != 0) {
+      if (current_query != this.current_query) return;
+      REQUESTS_CACHE[current_query] = data_parsed;
+      table_add_new_data_wrap(data_parsed);
+      return;
+    }
+  
+    REQUESTS_CACHE[current_query] = [];
+  
+    try {
+      const error_msg = data_parsed.detail[0].msg;
+      return this.show_error(error_msg); 
+    } catch (error) {
+      return this.show_no_data();
+    }
+  }
+  response_json() {
+    console.time("TopRequest | JSONparse");
+    const data_parsed = JSON.parse(this.response);
+    console.timeEnd("TopRequest | JSONparse");
+    return data_parsed;
+  }
+  show_no_data() {
+    SECTION_NO_DATA.style.removeProperty("display");
+  }
+  show_error(error) {
+    SECTION_ON_ERROR.style.removeProperty("display");
+    SECTION_ON_ERROR_DETAILS.textContent = error;
+  }
 }
 
-function query_server(query) {
-  loadingInfo.textContent = "Downloading top:";
-  tableContainer.style.display = "none";
-  loadingInfoPanel.style.removeProperty("display");
-  console.time("query");
-  xrequest.open("POST", TOP_POST);
-  xrequest.setRequestHeader("Content-Type", "application/json");
-  xrequest.send(query);
-}
-
-function fetch_data() {
+function new_state() {
+  LOADING_INFO.textContent = "Downloading top:";
+  TABLE_CONTAINER.style.display = "none";
+  SECTION_NO_DATA.style.display = "none";
+  SECTION_ON_ERROR.style.display = "none";
+  LOADING_INFO_PANEL.style.removeProperty("display");
+  
   const query = make_query();
-  CACHE.lastQuery = query;
-  const data = CACHE[query];
-  data ? table_add_new_data_wrap(data) : query_server(query);
+  const data = REQUESTS_CACHE[query];
+  data ? table_add_new_data_wrap(data) : TopRequest.get_new_data(query);
 }
 
-function search_changed() {
-  const __diff = is_heroic() ? 'H' : "N";
-  const title = `UwU Logs - Top - ${selectBoss.value} - ${selectSize.value}${__diff}`;
+function fetch_column(event) {
+  const current_table = get_cur_table();
+  SORT_VARS.last_column_sort[current_table.id] = event.target.id;
+  new_state();
+}
+
+function push_new_state() {
+  const difficulty = heroic_toggled() ? 'H' : "N";
+  const mode = `${SELECT_SIZE.value}${difficulty}`;
+  const title = `UwU Logs - Top - ${SELECT_BOSS.value} - ${mode}`;
   document.title = title;
 
   const parsed = {
-    server: selectServer.value,
-    raid: selectInstance.value,
-    boss: selectBoss.value,
-    size: selectSize.value,
-    mode: is_heroic() ? 1 : 0,
-    best: checkboxCombine.checked ? 1 : 0,
-    cls: selectClass.value,
-    spec: selectSpec.value,
+    server: SELECT_SERVER.value,
+    raid: SELECT_RAID.value,
+    boss: SELECT_BOSS.value,
+    size: SELECT_SIZE.value,
+    mode: heroic_toggled() ? 1 : 0,
+    best: CHECKBOX_COMBINE.checked ? 1 : 0,
+    cls: SELECT_CLASS.value,
+    spec: SELECT_SPEC.value,
   };
 
   const new_params = new URLSearchParams(parsed).toString();
   const url = `?${new_params}`;
   history.pushState(parsed, title, url);
-
-  fetch_data();
 }
 
-function is_valid_param(elm, par) {
-  return [...elm.options].map(o => o.value).includes(par);
+function state_changed() {
+  push_new_state();
+  new_state();
 }
+
+///////////////////////////////
 
 function find_value_index(select, option_name) {
-  for (let i = 0; i < select.childElementCount; i++) {
-    if (select[i].textContent == option_name) return i;
+  for (const e of select.children) {
+    if (e.value == option_name) return e.index;
   }
 }
 
 function get_default_index(select) {
-  if (select == selectServer) {
-    return find_value_index(select, 'Lordaeron');
-  } else if (select == selectClass) {
-    return find_value_index(select, "Priest");
-  } else if (select == selectSpec) {
-    return find_value_index(select, "Shadow");
+  switch (select) {
+    case SELECT_SERVER:
+      return find_value_index(select, "Lordaeron");
+    case SELECT_CLASS:
+      return find_value_index(select, "Priest");
+    case SELECT_SPEC:
+      return DEFAULT_SPEC[SELECT_CLASS.value];
+    default:
+      return 0;
   }
-  return 0;
 }
 
-function fetch_column(event) {
-  SORT_VARS.column = event.target;
-  fetch_data();
+function find_select_index(select, value) {
+  if (select == SELECT_SPEC && value == -1 && points_selected()) {
+    return get_default_index(select);
+  }
+  return find_value_index(select, value) ?? get_default_index(select);
 }
 
+function element_init(elm) {
+  switch (elm) {
+    case SELECT_RAID:
+      return on_change_instance();
+    case SELECT_CLASS:
+      return on_change_class();
+  }
+}
+
+function element_set_value(elm, value) {
+  if (elm.nodeName == "INPUT") {
+    elm.checked = value != 0;
+  } else if (elm.nodeName == "SELECT") {
+    elm.selectedIndex = find_select_index(elm, value);
+    element_init(elm);
+  } else {
+    console.error("! Wrong element type:", elm, value);
+  }
+}
+
+function init_from_query(search_params) {
+  for (const key in INTERACTABLES) {
+    const elm = INTERACTABLES[key];
+    const value = search_params.get(key);
+    element_set_value(elm, value);
+  }
+}
+function init_from_localstorage() {
+  for (const key in INTERACTABLES) {
+    const elm = INTERACTABLES[key];
+    const value = LOCAL_STORAGE.get(elm);
+    element_set_value(elm, value);
+  }
+}
+
+function add_toggle_functions(toggle, callback) {
+  toggle.addEventListener('change', () => {
+    LOCAL_STORAGE.set(toggle, toggle.checked);
+    callback();
+  });
+}
+function init_other_elements() {
+  const show_total = LOCAL_STORAGE.get(TOGGLE_TOTAL_DAMAGE);
+  TOGGLE_TOTAL_DAMAGE.checked = show_total == "true" ? true : show_total == "false" ? false : is_landscape.matches;
+  TOGGLE_USEFUL_DAMAGE.checked = LOCAL_STORAGE.get(TOGGLE_USEFUL_DAMAGE) != "false";
+  TOGGLE_LIMIT.checked = LOCAL_STORAGE.get(TOGGLE_LIMIT) != "false";
+
+  add_toggle_functions(TOGGLE_TOTAL_DAMAGE, () => TOGGLE_COLUMNS.total_columns());
+  add_toggle_functions(TOGGLE_USEFUL_DAMAGE, () => TOGGLE_COLUMNS.useful_columns());
+  add_toggle_functions(TOGGLE_LIMIT, new_state);
+
+  toggle_difficulty_checkbox();
+}
+
+///////////////////////////////
 
 function new_option(value, index) {
-  const _option = document.createElement('option');
-  _option.value = index === undefined ? value : index;
-  _option.innerHTML = value;
-  return _option;
+  const option = document.createElement('option');
+  option.value = index === undefined ? value : index;
+  option.innerHTML = value;
+  return option;
 }
 
 function on_change_instance() {
-  selectBoss.innerHTML = "";
-  BOSSES[selectInstance.value].forEach(boss_name => selectBoss.appendChild(new_option(boss_name)));
+  SELECT_BOSS.innerHTML = "";
+  BOSSES[SELECT_RAID.value].forEach(boss_name => SELECT_BOSS.appendChild(new_option(boss_name)));
 
-  const points_selected = is_points();
-  IRRELEVANT_FOR_POINTS.forEach(e => e.disabled = points_selected);
+  const _points_selected = points_selected();
+  IRRELEVANT_FOR_POINTS.forEach(e => e.disabled = _points_selected);
 
-  on_change_class();
-};
+  const _speedrun_selected = speedrun_selected();
+  IRRELEVANT_FOR_SPEEDRUN.forEach(e => e.disabled = _speedrun_selected);
 
-function add_specs() {
-  selectSpec.innerHTML = "";
-  const class_index = CLASSES[selectClass.value];
-  const specs = SPECS_SELECT_OPTIONS[class_index];
-  selectSpec.appendChild(new_option('All specs', -1));
-  if (!specs) return;
-
-  specs.forEach((spec_name, i) => selectSpec.appendChild(new_option(spec_name, i + 1)));
-};
-function on_change_class(_new) {
-  if (is_points() && selectClass.value == -1) {
-    selectClass.selectedIndex = 1;
-    _new = true;
+  toggle_difficulty_checkbox();
+  
+  if (_points_selected && SELECT_CLASS.selectedIndex == 0) {
+    SELECT_CLASS.selectedIndex = 1;
+    add_specs();
   }
 
-  if (_new != undefined) add_specs();
+  LOCAL_STORAGE.set(SELECT_RAID, SELECT_RAID.value);
+}
 
-  on_change_spec();
+function set_default_spec() {
+  SELECT_SPEC.selectedIndex = DEFAULT_SPEC[SELECT_CLASS.value];
+}
+function add_specs() {
+  SELECT_SPEC.innerHTML = "";
+  const class_index = CLASSES[SELECT_CLASS.value];
+  const specs = SPECS_SELECT_OPTIONS[class_index];
+  SELECT_SPEC.appendChild(new_option('All specs', -1));
+  if (!specs) return;
+  
+  specs.forEach((spec_name, i) => SELECT_SPEC.appendChild(new_option(spec_name, i + 1)));
+
+  set_default_spec();
+}
+function on_change_class(e) {
+  if (points_selected() && SELECT_CLASS.selectedIndex == 0) {
+    SELECT_CLASS.selectedIndex = 1;
+  }
+
+  add_specs();
+
+  if (!e) return;
+  LOCAL_STORAGE.set(SELECT_CLASS, SELECT_CLASS.value);
+  LOCAL_STORAGE.set(SELECT_SPEC, SELECT_SPEC.value);
 }
 
 function on_change_spec() {
-  if (is_points() && selectSpec.value == -1) {
-    selectSpec.selectedIndex = DEFAULT_SPEC[selectClass.value];
+  if (points_selected() && SELECT_SPEC.value == -1) {
+    SELECT_SPEC.selectedIndex = DEFAULT_SPEC[SELECT_CLASS.value];
   }
+  LOCAL_STORAGE.set(SELECT_SPEC, SELECT_SPEC.value);
 }
 
-function on_server_change() {
-  localStorage.setItem('top_server', selectServer.value);
+function set_new_server_default() {
+  LOCAL_STORAGE.set(SELECT_SERVER, SELECT_SERVER.value);
 }
 
-function add_extra_function(elm) {
-  switch (elm) {
-    case selectInstance:
-      on_change_instance();
-      elm.addEventListener('change', on_change_instance);
-      break;
-    case selectClass:
-      on_change_class(true);
-      elm.addEventListener('change', on_change_class);
-      break;
-    case selectSpec:
-      elm.addEventListener('change', on_change_spec);
-      break;
-    case selectServer:
-      elm.addEventListener('change', on_server_change);
-      break;
-  }
+function add_extra_function() {
+  SELECT_RAID.addEventListener('change', on_change_instance);
+  SELECT_BOSS.addEventListener('change', toggle_difficulty_checkbox);
+  SELECT_CLASS.addEventListener('change', on_change_class);
+  SELECT_SPEC.addEventListener('change', on_change_spec);
+  SELECT_SERVER.addEventListener('change', set_new_server_default);
 }
-function add_on_change_events(elm) {
-  add_extra_function(elm);
-  elm.addEventListener('change', search_changed);
+
+function add_refresh_on_change() {
+  for (const elm of Object.values(INTERACTABLES)) {
+    elm.addEventListener('change', state_changed);
+  }
 }
 
 function init() {
-  Object.keys(BOSSES).forEach(name => selectInstance.appendChild(new_option(name)));
-  CLASSES.forEach((name, i) => selectClass.appendChild(new_option(name, i)));
-  const currentParams = new URLSearchParams(window.location.search);
-  for (let key in INTERACTABLES) {
-    const par = currentParams.get(key);
-    const elm = INTERACTABLES[key];
-    if (elm.nodeName == "INPUT") {
-      elm.checked = par != 0;
-    } else if (is_valid_param(elm, par)) {
-      elm.value = par;
-    } else {
-      elm.selectedIndex = get_default_index(elm);
-    }
-    add_on_change_events(elm);
-  }
+  Object.keys(BOSSES).forEach(name => SELECT_RAID.appendChild(new_option(name)));
+  CLASSES.forEach((name, i) => SELECT_CLASS.appendChild(new_option(name, i)));
+  
+  const search_params = new URLSearchParams(window.location.search);
+  search_params.size ? init_from_query(search_params) : init_from_localstorage();
 
-  if (is_landscape.matches) {
-    document.getElementById("head-external").textContent = "Ext";
-    document.getElementById("head-self").textContent = "Slf";
-    document.getElementById("head-rekt").textContent = "Rkt";
-  }
+  init_other_elements();
 
-  toggleTotalDamage.checked = localStorage.getItem("top_total") == "false" ? false : is_landscape.matches;
-  toggleUsefulDamage.checked = localStorage.getItem("top_useful") == "false" ? false : true;
-  toggleLimit.checked = localStorage.getItem("top_limit") == "false" ? false : true;
-  selectServer.value = localStorage.getItem("top_server") || 'Lordaeron';
+  add_extra_function();
+  add_refresh_on_change();
 
-  toggleTotalDamage.addEventListener('change', () => {
-    localStorage.setItem("top_total", toggleTotalDamage.checked);
-    toggle_total_columns();
-  });
-  toggleUsefulDamage.addEventListener('change', () => {
-    localStorage.setItem("top_useful", toggleUsefulDamage.checked);
-    toggle_useful_columns();
-  });
-  toggleLimit.addEventListener('change', () => {
-    localStorage.setItem("top_limit", toggleLimit.checked);
-    fetch_data();
-  });
-
-  search_changed();
+  state_changed();
+  console.log(SELECT_SPEC);
+  
   document.querySelectorAll('th.sortable').forEach(th => th.addEventListener('click', fetch_column));
 }
 
